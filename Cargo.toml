@@ -1,0 +1,40 @@
+[package]
+name = "kea-hal"
+version = "0.1.0"
+authors = ["W. Clayton Pannell <clayton.pannell@gmail.com>"]
+edition = "2018"
+description = "HAL for NXP KEA devices."
+documentation = "https://github.com/wcpannell/skeazn642-hal"
+readme = "README.md"
+keywords = ["keazn64", "nxp", "embedded-hal", "no_std", "embedded"]
+categories = ["embedded", "no-std"]
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cortex-m = "0.7"
+nb = "1.0.0"
+embedded-time = "0.10.1"
+
+[dependencies.SKEAZN642]
+version = "0.1.0"
+
+[dependencies.embedded-hal]
+version  = "0.2.4"
+features = ["unproven"]
+
+[dependencies.embedded-hal-alpha]
+version = "=1.0.0-alpha.4"
+package = "embedded-hal"
+
+[dependencies.cortex-m-rt]
+version = "0.6.13"
+optional = true
+
+[dependencies.void]
+version = "1.0.2"
+default-features = false
+
+[features]
+rt = ["SKEAZN642/rt"]
