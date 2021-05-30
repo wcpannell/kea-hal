@@ -106,8 +106,103 @@
 //! the input of the FLL as an output clock source. Passes through RDIV. IREFS
 //! must be set to select the IRC.
 
-use crate::pac::ICS;
+use crate::pac::{ICS, OSC};
 use core::marker::PhantomData;
+
+/// Custom Error Types
+pub enum Error {
+    /// Value was not valid for the function it was passed into.
+    InvalidValue,
+}
+
+/// Grabs ownership of ICS from the PAC.
+pub trait ICSExt {
+    /// ICS struct
+    type Ics;
+    /// grab the Peripheral from PAC;
+    fn split(self) -> Self::Ics;
+}
+
+/// HAL struct for the Internal clock system.
+pub struct Ics {
+    /// The state of the source of the system clock
+    ///
+    /// The ICS defaults to the FEI mode of operation. In this mode, ICSOUT,
+    /// which is the system clock, is
+    /// 16MHz = IRC * FLL * BDIV = 31.25kHz * 1024 / 2; at default values.
+    pub system_clock: SystemClock<IntRefClock, FllEnabled, LpDisabled>,
+
+    /// The state of ICSIRCLK output
+    pub irc_out: IrcOut<DefaultIrcOut>,
+
+    /// The state of the frequency-locked loop monitor
+    pub lock_status: LockStatus<Poll>,
+}
+
+impl ICSExt for ICS {
+    type Ics = Ics;
+    fn split(self) -> Ics {
+        Ics {
+            system_clock: SystemClock {
+                _source: PhantomData,
+                _fll: PhantomData,
+                _low_power: PhantomData,
+            },
+            irc_out: IrcOut { _mode: PhantomData },
+            lock_status: LockStatus { _mode: PhantomData },
+        }
+    }
+}
+
+impl Ics {
+    /// Read the IRC's trim value.
+    ///
+    /// This SCTRIM is used to tweak the frequency of the Internal
+    /// Reference Clock. This factory trimmed value is loaded from
+    /// nonvolatile memory on boot to set the IRC to be 31.25kHZ (yielding
+    /// a 16MHz system clock in FEI mode). Note that this interface
+    /// includes the SCFTRIM bit, which contains the LSB of the value used
+    /// by the ICS module.
+    pub fn sctrim(self) -> u16 {
+        unsafe {
+            let ics = &(*ICS::ptr());
+            ((ics.c3.read().bits() as u16) << 1) + ics.c4.read().scftrim().bit() as u16
+        }
+    }
+
+    /// Set the IRC's trim value.
+    ///
+    /// This SCTRIM is used to tweak the frequency of the Internal
+    /// Reference Clock. This factory trimmed value is loaded from
+    /// nonvolatile memory on boot to set the IRC to be 31.25kHZ (yielding
+    /// a 16MHz system clock in FEI mode). Note that this interface
+    /// includes the SCFTRIM bit, which contains the LSB of the value used
+    /// by the ICS module.
+    ///
+    /// Write 0x1FF to max out the system clock frequency to (close to)
+    /// 40MHz.
+    ///
+    /// If system_clock configured in FEI mode this should probably wait for
+    /// the FLL to stabilize (LOCK)
+    pub fn set_sctrim(self, value: u16) -> Result<(), Error> {
+        if value > 0x1FF {
+            return Err(Error::InvalidValue);
+        }
+        unsafe {
+            let ics = &(*ICS::ptr());
+            ics.c3.write(|w| w.bits((value >> 1) as u8));
+            ics.c4.modify(|_, w| w.scftrim().bit((value & 1) == 1));
+        }
+        Ok(())
+    }
+
+    /// Return the ICS Status Struct.
+    ///
+    /// It's a PAC thing. deal with it until I make this prettier.
+    pub fn status(&mut self) -> &pac::ics::S {
+        unsafe { &(*ICS::ptr()).s }
+    }
+}
 
 /// struct that represents the state of the System Clock output ICSOUT
 pub struct SystemClock<Source, FLL, LowPower> {
@@ -286,203 +381,49 @@ impl<Source> SystemClock<Source, FllBypassed, LpDisabled> {
     }
 }
 
-// Rough First pass at mapping out stuff. Delete after verifying.
-// // Modes of operation.
-// // Control whether the internal or external clock is connected to the Frequency-
-// // Locked Loop (FLL) node, and if the FLL output is used as a clock source.
-// //
-// // 7 modes of operation:
-// // FEI - FLL out selected,
-//
-// // These are the states of the clock source select MUX.
-// // Note: CLKS = 0b11 exists, but is reserved, changes to 0b00
-// /// FLL engaged, internal
-// pub struct ClksFll; // 0b00, default
-//
-// /// Internal Ref Clock
-// pub struct ClksIrc; // 0b01
-//
-// /// External Ref Clock
-// pub struct ClksErc; // 0b10
-//
-// // IRCLKEN, FLL control states.
-// //
-// // These control the behavior of the FLL when the FLL is not selected by the
-// // clock source select mux.
-//
-// /// Keep the FLL enabled and running when bypassed. Default
-// pub struct NormalPower;
-//
-// /// Disabled the FLL when bypassed. Low power.
-// pub struct LowPower;
-//
-// // IREFS, FLL Input mux states
-// //
-// // These determine which source is used as an input for the FLL
-//
-// /// internal clock source is connected to FLL. Default
-// pub struct FllSrcInternal; // 0b1, Default
-//
-// /// External clock source is connected to FLL
-// pub struct FllSrcExternal; //0b0
-//
-// // ICSIRCLK output settings
-// //
-// // Determines if the internal reference clock is output to ICSIRCLK
-//
-// /// No ICSIRCLK, Default
-// pub struct ICSIRCLKDisabled;
-//
-// /// ICSIRCLK output enabled
-// pub struct ICSIRCLKEnabled;
-//
-// /// Stop Internal Reference clock in Stop mode. Default
-// pub struct NoIrcInStop;
-//
-// /// Run the Internal Reference Clock in stop mode if ICSIRCLK enabled or IRC
-// /// as clock source.
-// pub struct IrcRunInStop;
-//
-// /// Disable clock monitor (default)
-// pub struct ClockMonDisabled;
-//
-// /// Enable clock monitor to reset when external clock is lost.
-// pub struct ClockMonEnabled;
-//
-//
-// pub struct S {
-//     _0: (),
-// }
-//
-// // pub struct Config<CLKS_MODE, LP_MODE, IREFS_MODE, IRCLKEN_MODE, IREFSTEN_MODE, LOLIE_MODE> {
-// //     clks: ClockSource<CLKS_MODE>,
-// //     lp: LowPower<LP_MODE>,
-// //     irefs: FllSource<IREFS_MODE>,
-// //     irclken: ICSIRCLK<IRCLKEN_MODE>,
-// //     irefsten: IrcRunInStop<IREFSTEN_MODE>,
-// //     lolie: LossOfLockInt<LOLIE_MODE>,
-// //     rdiv: Option<u32>,
-// //     bdiv: Option<u32>,
-// // }
-
-/// Custom Error Types
-pub enum Error {
-    /// Value was not valid for the function it was passed into.
-    InvalidValue,
-}
-
-/// State of ICSIRCLK (output of the ICS module's Internal Reference CLocK)
-pub struct IrcOut<MODE> {
-    _mode: PhantomData<MODE>,
-}
-
-/// ICSIRCLK defaults to Disabled
-pub type DefaultIrcOut = Stopped;
-
-/// ICSIRCLK disabled
-pub struct Stopped;
-
-/// ICSIRCLK Enabled, but is Disabled on entry to Stop Mode.
-pub struct Stoppable;
-
-/// ICSIRCLK Always Enabled, even in Stop mode.
-pub struct Unstoppable;
-
-/// Grabs ownership of ICS from the PAC.
-pub trait ICSExt {
-    /// ICS struct
-    type Ics;
-    /// grab the Peripheral from PAC;
-    fn constrain(self) -> Self::Ics;
-}
-
-/// HAL struct for the Internal clock system.
-pub struct Ics {
-    /// The state of the source of the system clock
+/// Any Internal mode (cannot be set in FEE, FBE, or FBELP mode)
+impl<Fll, LowPower> SystemClock<IntRefClock, Fll, LowPower> {
+    /// Set the RDIV value
     ///
-    /// The ICS defaults to the FEI mode of operation. In this mode, ICSOUT,
-    /// which is the system clock, is
-    /// 16MHz = IRC * FLL * BDIV = 31.25kHz * 1024 / 2; at default values.
-    pub system_clock: SystemClock<IntRefClock, FllEnabled, LpDisabled>,
-
-    /// The state of ICSIRCLK output
-    pub irc_out: IrcOut<DefaultIrcOut>,
-}
-
-impl ICSExt for ICS {
-    type Ics = Ics;
-    fn constrain(self) -> Ics {
-        Ics {
-            system_clock: SystemClock {
-                _source: PhantomData,
-                _fll: PhantomData,
-                _low_power: PhantomData,
-            },
-            irc_out: IrcOut { _mode: PhantomData },
-        }
-    }
-}
-impl Ics {
-    /// Read the IRC's trim value.
+    /// RDIV divides the output of the external reference clock by powers of 2.
+    /// RDIV_OUT = OSC_OUT / (2 ** n + 1)
+    /// The value at reset is 0 (RDIV_OUT = OSC_OUT)
     ///
-    /// This SCTRIM is used to tweak the frequency of the Internal
-    /// Reference Clock. This factory trimmed value is loaded from
-    /// nonvolatile memory on boot to set the IRC to be 31.25kHZ (yielding
-    /// a 16MHz system clock in FEI mode). Note that this interface
-    /// includes the SCFTRIM bit, which contains the LSB of the value used
-    /// by the ICS module.
-    pub fn sctrim(self) -> u16 {
-        unsafe {
-            let ics = &(*ICS::ptr());
-            ((ics.c3.read().bits() as u16) << 1) + ics.c4.read().scftrim().bit() as u16
-        }
-    }
-
-    /// Set the IRC's trim value.
-    ///
-    /// This SCTRIM is used to tweak the frequency of the Internal
-    /// Reference Clock. This factory trimmed value is loaded from
-    /// nonvolatile memory on boot to set the IRC to be 31.25kHZ (yielding
-    /// a 16MHz system clock in FEI mode). Note that this interface
-    /// includes the SCFTRIM bit, which contains the LSB of the value used
-    /// by the ICS module.
-    ///
-    /// Write 0x1FF to max out the system clock frequency to (close to)
-    /// 40MHz.
-    ///
-    /// If system_clock configured in FEI mode this should probably wait for
-    /// the FLL to stabilize (LOCK)
-    pub fn set_sctrim(self, value: u16) -> Result<(), Error> {
-        if value > 0x1FF {
+    /// Note that per RDIV definition (pg272 in ICS_C1 of KEA64 ref man) this
+    /// cannot be changed while the SystemClock is in FEE or FBE mode. To use
+    /// set this first, then transition to FBE or FEE mode.
+    pub fn rdiv(&self, div: u8) -> Result<(), Error> {
+        if div > 0b111 {
             return Err(Error::InvalidValue);
         }
+
+        // values 0b110 & 0b111 are undefined / reserved. When osc is in high
+        // range mode.
+        if unsafe { (*OSC::ptr()).cr.read().range().is_1() } && (div >= 0b110) {
+            return Err(Error::InvalidValue);
+        }
+
         unsafe {
-            let ics = &(*ICS::ptr());
-            ics.c3.write(|w| w.bits((value >> 1) as u8));
-            ics.c4.modify(|_, w| w.scftrim().bit((value & 0x1FE) == 1));
+            &(*ICS::ptr()).c1.modify(|_, w| w.rdiv().bits(div));
         }
         Ok(())
     }
+}
 
-    /// Return the ICS Status Struct.
+/// Any External mode (cannot be set in FEI, FBI, or FBILP)
+impl<Fll, LowPower> SystemClock<ExtRefClock, Fll, LowPower> {
+    /// Enable/Disable Clock Monitor.
     ///
-    /// It's a PAC thing. deal with it until I make this prettier.
-    pub fn status(&mut self) -> &pac::ics::S {
-        unsafe { &(*ICS::ptr()).s }
+    /// When enabled, the MCU will reset if it loses the external clock signal
+    pub fn clock_monitor(&self, enable: bool) {
+        unsafe {
+            (*ICS::ptr()).c4.modify(|_, w| w.cme().bit(enable));
+        }
     }
+}
 
-    // ran out of time to deal with this.
-    // /// Read the BDIV value
-    // ///
-    // /// BDIV divides the output of the ICS (in any mode) by powers of 2.
-    // /// ICSOUT = CLKSoutput / (2 ** n + 1)
-    // /// The value at reset is 1 (ICSOUT = CLKSoutput / 2)
-    // pub fn bdiv(self) -> u8 {
-    //     unsafe {
-    //         &(*ICS::ptr()).c2.read().bdiv().bits()
-    //     }
-    // }
-
+/// For any state of SystemClock
+impl<Source, Fll, LowPower> SystemClock<Source, Fll, LowPower> {
     /// Set the BDIV value
     ///
     /// BDIV divides the output of the ICS (in any mode) by powers of 2.
@@ -504,11 +445,129 @@ impl Ics {
         }
         Ok(())
     }
+}
 
-    /// Enable/Disable the Internal Reference clock output on ICSIRCLK
-    pub fn output_irc(self, output: bool) {
+/// State of ICSIRCLK (output of the ICS module's Internal Reference CLocK)
+pub struct IrcOut<MODE> {
+    _mode: PhantomData<MODE>,
+}
+
+/// ICSIRCLK defaults to Disabled
+pub type DefaultIrcOut = Stopped;
+
+/// ICSIRCLK disabled
+pub struct Stopped;
+
+/// ICSIRCLK Enabled, but is Disabled on entry to Stop Mode.
+pub struct Running;
+
+/// ICSIRCLK Always Enabled, even in Stop mode.
+pub struct Unstoppable;
+
+impl IrcOut<Stopped> {
+    /// Enable the Internal Reference clock output on ICSIRCLK
+    pub fn into_running(self) -> IrcOut<Running> {
         unsafe {
-            &(*ICS::ptr()).c1.modify(|_, w| w.irclken().bit(output));
+            (*ICS::ptr()).c1.modify(|_, w| w.irclken()._1());
         }
+        IrcOut { _mode: PhantomData }
+    }
+}
+
+impl IrcOut<Running> {
+    /// Disable the Internal Reference Clock output on ICSIRCLK
+    pub fn into_stopped(self) -> IrcOut<Stopped> {
+        unsafe {
+            (*ICS::ptr()).c1.modify(|_, w| w.irclken()._0());
+        }
+        IrcOut { _mode: PhantomData }
+    }
+
+    /// Allow Internal reference clock and ICSIRCLK to continue running during
+    /// Stop mode.
+    ///
+    /// This allows other peripherals such as the RTC and Watchdog to continue
+    /// using this clock. This mode is also recommended if the systemclock is
+    /// using FEI, FBI, of FBILP and needs to restart quickly after Stop mode.
+    pub fn into_unstoppable(self) -> IrcOut<Unstoppable> {
+        unsafe {
+            (*ICS::ptr()).c1.modify(|_, w| w.irefsten()._1());
+        }
+        IrcOut { _mode: PhantomData }
+    }
+}
+
+impl IrcOut<Unstoppable> {
+    /// make stoppable, but keep ICSIRCLK running.
+    pub fn into_running(self) -> IrcOut<Running> {
+        unsafe {
+            (*ICS::ptr()).c1.modify(|_, w| w.irefsten()._0());
+        }
+        IrcOut { _mode: PhantomData }
+    }
+
+    /// Make stoppable and disable ICSIRCLK.
+    pub fn into_stopped(self) -> IrcOut<Stopped> {
+        let temp = self.into_running();
+        temp.into_stopped()
+    }
+}
+
+/// Monitor the frequency-locked loop for loss of lock
+///
+/// This may make more sense to be a method of SystemClock, so that it can
+/// only be used while the FLL is active. The default mode is polled (Poll).
+pub struct LockStatus<MODE> {
+    _mode: PhantomData<MODE>,
+}
+
+/// FLL monitor must be polled to determine if lock has been lost.
+pub struct Poll;
+
+/// FLL monitor generates an interrupt when lock is lossed
+pub struct Interrupt;
+
+/// Any state of lock status
+impl<MODE> LockStatus<MODE> {
+    /// Is the FLL currently locked?
+    pub fn locked(&self) -> bool {
+        unsafe { (*ICS::ptr()).s.read().lock().bit() }
+    }
+
+    /// Has the FLL lost its lock since the last time it was acknowledged
+    pub fn lock_lost(&self) -> bool {
+        let ics = unsafe { &(*ICS::ptr()) };
+        let ret_val: bool = ics.s.read().lols().bit();
+
+        // Acknowledge the loss of lock (if happened)
+        if ret_val {
+            // write 1 to clear
+            ics.s.modify(|_, w| w.lols()._1());
+        }
+
+        ret_val
+    }
+}
+
+impl LockStatus<Poll> {
+    /// Trigger an Interrupt on loss of lock
+    ///
+    /// Polling is still functional in the Interrupt state, if needed to verify
+    /// no loss occurred or current state.
+    pub fn into_interrupt(self) -> LockStatus<Interrupt> {
+        unsafe {
+            (*ICS::ptr()).c4.modify(|_, w| w.lolie()._1());
+        }
+        LockStatus { _mode: PhantomData }
+    }
+}
+
+impl LockStatus<Interrupt> {
+    /// Disable interrupt on loss of lock.
+    pub fn into_poll(self) -> LockStatus<Poll> {
+        unsafe {
+            (*ICS::ptr()).c4.modify(|_, w| w.lolie()._0());
+        }
+        LockStatus { _mode: PhantomData }
     }
 }

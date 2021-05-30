@@ -16,7 +16,7 @@ fn main() -> ! {
 
     let gpioa = dp.GPIOA.split();
     let gpiob = dp.GPIOB.split();
-    let clocks = dp.ICS.constrain();
+    let clocks = dp.ICS.split();
     let sysclock = clocks.system_clock.into_fbi(); // 31.25kHz system clockrate
 
     // Pot is on PTC2
