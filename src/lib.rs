@@ -1,4 +1,4 @@
-//! # SKEAZN642-HAL
+//! # KEA-HAL
 //!
 //! A Hardware Abstraction Layer (HAL) implementing
 //! [embedded-hal](https://github.com/rust-embedded/embedded-hal) traits for
