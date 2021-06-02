@@ -1,10 +1,11 @@
 [package]
 name = "kea-hal"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["W. Clayton Pannell <clayton.pannell@gmail.com>"]
 edition = "2018"
 description = "HAL for NXP KEA devices."
-documentation = "https://github.com/wcpannell/kea-hal"
+documentation = "https://docs.rs/kea-hal"
+repository = "https://github.com/wcpannell/kea-hal"
 readme = "README.md"
 keywords = ["keazn64", "nxp", "embedded-hal", "no_std", "embedded"]
 categories = ["embedded", "no-std"]
@@ -18,7 +19,7 @@ nb = "1.0.0"
 embedded-time = "0.10.1"
 
 [dependencies.SKEAZN642]
-version = "0.1.0"
+version = "0.2.0"
 
 [dependencies.embedded-hal]
 version  = "0.2.4"

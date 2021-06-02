@@ -1,5 +1,5 @@
 [package]
-name = "blinky"
+name = "blinky-clocks"
 version = "0.1.0"
 authors = ["W. Clayton Pannell <clayton.pannell@gmail.com>"]
 edition = "2018"
