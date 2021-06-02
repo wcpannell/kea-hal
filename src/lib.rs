@@ -77,7 +77,6 @@ pub mod clocks;
 pub mod gpio;
 pub mod port;
 pub mod prelude;
-//pub mod rcc;
 
 /// State of Peripheral
 pub mod init_state {
