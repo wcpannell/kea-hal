@@ -110,22 +110,22 @@ pub enum DevicePinOuts {
 
 impl Id {
     /// Return the Kinetis Family ID (4 bits)
-    pub fn family() -> u8 {
+    pub fn family(&self) -> u8 {
         unsafe { &(*SIM::ptr()) }.srsid.read().famid().bits()
     }
 
     /// Return the Kinetis sub-family ID (4 bits)
-    pub fn subfamily() -> u8 {
+    pub fn subfamily(&self) -> u8 {
         unsafe { &(*SIM::ptr()) }.srsid.read().subfamid().bits()
     }
 
     /// Return the device revision number (4 bits)
-    pub fn revision() -> u8 {
+    pub fn revision(&self) -> u8 {
         unsafe { &(*SIM::ptr()) }.srsid.read().rev_id().bits()
     }
 
     /// Device pin id
-    pub fn pinout() -> DevicePinOuts {
+    pub fn pinout(&self) -> DevicePinOuts {
         let sim = unsafe { &(*SIM::ptr()) };
 
         match sim.srsid.read().pinid().bits() {
@@ -147,7 +147,7 @@ impl Id {
 impl Status {
     /// A reset was caused by a module failing to acknowledge entering Stop
     /// mode
-    pub fn stop_error_reset() -> bool {
+    pub fn stop_error_reset(&self) -> bool {
         unsafe { &(*SIM::ptr()) }.srsid.read().sackerr().bit()
     }
 
@@ -155,17 +155,17 @@ impl Status {
     ///
     /// The request is made in the MDM-AP register, this is called MDMAP in
     /// SIM_SRSID (section 12.2.1 of KEA64RM).
-    pub fn debugger_reset() -> bool {
+    pub fn debugger_reset(&self) -> bool {
         unsafe { &(*SIM::ptr()) }.srsid.read().mdmap().bit()
     }
 
     /// A reset was caused by software request
-    pub fn software_reset() -> bool {
+    pub fn software_reset(&self) -> bool {
         unsafe { &(*SIM::ptr()) }.srsid.read().sw().bit()
     }
 
     /// A reset was caused by a core lockup event
-    pub fn lockup_reset() -> bool {
+    pub fn lockup_reset(&self) -> bool {
         unsafe { &(*SIM::ptr()) }.srsid.read().lockup().bit()
     }
 
@@ -173,24 +173,24 @@ impl Status {
     ///
     /// For normal startup, this is set, if there was some other reason for
     /// reseting, this is cleared.
-    pub fn power_on_reset() -> bool {
+    pub fn power_on_reset(&self) -> bool {
         unsafe { &(*SIM::ptr()) }.srsid.read().por().bit()
     }
 
     /// A reset was caused by the reset Pin
-    pub fn pin_reset() -> bool {
+    pub fn pin_reset(&self) -> bool {
         unsafe { &(*SIM::ptr()) }.srsid.read().pin().bit()
     }
 
     /// A reset was caused by the watchdog.
-    pub fn watchdog_reset() -> bool {
+    pub fn watchdog_reset(&self) -> bool {
         unsafe { &(*SIM::ptr()) }.srsid.read().wdog().bit()
     }
 
     /// A reset was caused by the Internal Clock Source Peripheral
     ///
     /// This is called LOC (Loss Of Clock?) rest in KEA64RM (sect 12.2.1)
-    pub fn ics_reset() -> bool {
+    pub fn ics_reset(&self) -> bool {
         unsafe { &(*SIM::ptr()) }.srsid.read().loc().bit()
     }
 
@@ -198,7 +198,7 @@ impl Status {
     ///
     /// Brown out detection is controlled by the Power Mangement Controller
     /// (PMC) Peripheral
-    pub fn lv_reset() -> bool {
+    pub fn lv_reset(&self) -> bool {
         unsafe { &(*SIM::ptr()) }.srsid.read().lvd().bit()
     }
 }
