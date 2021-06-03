@@ -64,8 +64,9 @@
 //! - OSCERCLK - same as OSCCLK, made available to RTC, WDOG, and ADC modules
 //! - LPOCLK - fixed 1kHz output clock, available to RTC or WDOG modules.
 
-mod ics;
-mod osc;
+// These must be pub so the docs build. Not actually required for running.
+pub mod ics;
+pub mod osc;
 
 pub use ics::ICSExt;
 pub use osc::OSCExt;
