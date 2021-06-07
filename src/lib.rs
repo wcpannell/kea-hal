@@ -91,3 +91,11 @@ pub mod init_state {
 mod private {
     pub trait Sealed {}
 }
+
+/// A trait to consume a peripheral and return its HAL interface.
+pub trait HALExt {
+    /// The HAL WatchDog Interface Struct
+    type T;
+    /// Consume the HAL and split parts into the Interface Struct
+    fn split(self) -> Self::T;
+}

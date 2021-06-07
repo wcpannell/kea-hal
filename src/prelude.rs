@@ -6,3 +6,4 @@ pub use crate::gpio::GPIOExt as _kea_hal_gpio_GpioExt;
 pub use crate::hal::prelude::*;
 pub use crate::system::pmc::PMCExt as _kea_hal_system_pmc_PmcExt;
 pub use crate::system::sim::SIMExt as _kea_hal_system_sim_SimExt;
+pub use crate::HALExt as _kea_hal_hal_ext;

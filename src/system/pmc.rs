@@ -26,7 +26,7 @@
 //! bandgap voltage reference used by the ADC adn ACMP peripherals. This is
 //! impelemented in those areas.
 
-use crate::pac::PMC;
+use crate::{pac::PMC, HALExt};
 use core::marker::PhantomData;
 
 /// Error Enumeration
@@ -46,8 +46,8 @@ pub trait PMCExt {
     fn split(self) -> Self::Pmc;
 }
 
-impl PMCExt for PMC {
-    type Pmc = Pmc<Enabled, _2v6>;
+impl HALExt for PMC {
+    type T = Pmc<Enabled, _2v6>;
     fn split(self) -> Pmc<Enabled, _2v6> {
         Pmc {
             peripheral: self,
