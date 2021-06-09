@@ -5,6 +5,49 @@
 //! software does not leave the cpu stuck in an infinite loop or execute from
 //! unknown data.
 //!
+//! ** NOTE: ** The watchdog does not function well with the debugger active.
+//! writing to it is only successful in odd cases, with little effect.
+//! Attempting to unlock will trigger a reset. I pulled my hair out over a long
+//! weekend before I realized this. Yes, there is a DEBUG mode to set according
+//! the KEA64RM. It never works as expected.
+//!
+//! ## Usage
+//!
+//! ```rust
+//! #![no_main]
+//! #![no_std]
+//!
+//! use kea_hal as hal;
+//!
+//! use cortex_m_rt::entry;
+//! use hal::{pac, prelude::*, system};
+//! use panic_halt as _;
+//!
+//! #[entry]
+//! fn main() -> ! {
+//!     //println!("Hello, world!");
+//!     let _cp = cortex_m::Peripherals::take().unwrap();
+//!     let dp = pac::Peripherals::take().unwrap();
+//!
+//!     let watchdog = dp.WDOG.split();
+//!     let mut config = watchdog.configuration();
+//!     // Reset every 0xBEEF/32kHz seconds.
+//!     config.period = 0xBEEF;
+//!     config.clock = system::watchdog::WDogClock::IntRefClock;
+//!
+//!     // Trigger an interrupt before reset to log the error (or something).
+//!     config.interrupt = true;
+//!
+//!     // load new settings (watchdog will determine if needs to unlock or
+//!     // not)
+//!     let watchdog = watchdog.configure(config);
+//!
+//!     // Seal the watchdog so that it cannot be modified until reset
+//!     let watchdog.into_sealed();
+//! }
+//! ```
+//!
+//!
 //! ## Clock Sources
 //!
 //! * Bus Clock
@@ -17,9 +60,12 @@
 //! 16 bit timeout value, with optional, fixed, 1/256 prescaler for longer
 //!    timeout periods.
 //!
-//! ## Refresh write sequence
+//! ## Servicing the Watchdog.
 //!
-//! Write 0x2A6 and then 0x80B4 within 16 bus clocks.
+//! Call the [Watchdog.service] method to reset the countdown. This is often
+//! known as petting the watchdog.
+//!
+//! Refresh write sequence: 0x2A6 and then 0x80B4 within 16 bus clocks.
 //!
 //! ## Windowed refresh
 //!
@@ -36,7 +82,7 @@
 //! ## Watchdog Interrupt
 //!
 //! Allows some post-processing to be done after the watchdog triggers, but
-//! before the reset. Reset happens 128 bus clocks after the intterupt vector
+//! before the reset. Reset happens 128 bus clocks after the interrupt vector
 //! is fetched.
 //!
 //! ## Configuration
@@ -52,25 +98,13 @@ use core::marker::PhantomData;
 
 #[inline(always)]
 fn unlock(_cs: &interrupt::CriticalSection) {
-    //let peripheral = unsafe { &(*WDOG::ptr()) };
-    //peripheral.wdog_cnt().write(|w| unsafe { w.bits(0x20C5) });
-    //peripheral.wdog_cnt().write(|w| unsafe { w.bits(0x28D9) });
-
-    //The above ^^ is rusty. the below is what I had to do to meet the 16 cycle
-    //timing requirement. This gives asm equivelant to the C example provided
-    //in the docs
-
-    let count = 0x4005_2002 as *mut u16;
-    unsafe {
-        // D'oh, High is the lower bit for these u16 regs!
-        core::ptr::write_volatile(count, 0xC520);
-        core::ptr::write_volatile(count, 0xD928);
-    }
+    let peripheral = unsafe { &(*WDOG::ptr()) };
+    peripheral
+        .wdog_cnt()
+        .write(|w| unsafe { w.bits(0x20C5).bits(0x28D9) });
 }
 
 impl HALExt for WDOG {
-    //type T = WatchDog<Disabled, Locked>;
-    //fn split(self) -> WatchDog<Disabled, Locked> {
     type T = WatchDog<Enabled, Unlocked>;
     fn split(self) -> WatchDog<Enabled, Unlocked> {
         WatchDog {
@@ -102,7 +136,7 @@ pub enum WDogClock {
     ExtRefClock = 3,
 }
 
-/// asdf
+/// The interface presented to the user.
 pub struct WatchDog<State, UpdateState> {
     _enable: PhantomData<State>,
     _update: PhantomData<UpdateState>,
@@ -146,62 +180,40 @@ impl WatchDog<Enabled, Unlocked> {
     /// written to for configuration to take effect. The Window register may be
     /// omited if not in windowed mode.
     ///
-    /// There appears to be a typo in the CS1 definition (16.2.1 of KEA64RM) on
-    /// reset (and freshly programmed) the watchdog is actually disabled and
-    /// update is enabled (says 0x4005_2000 = 0x80, found to be 0x32)
+    /// Note: Configuring in an unlocked state with the debugger is attached
+    /// will have little useful effect.
     pub fn configure(self, config: WDogConfig) -> WatchDog<Enabled, Locked> {
-        unsafe {
-            let period: *mut u16 = 0x4005_2004 as *mut u16;
-            core::ptr::write_volatile(period, (config.period << 4) | (config.period >> 4));
-            let window: *mut u16 = (*WDOG::ptr()).wdog_win().as_ptr();
-            if config.windowed {
-                core::ptr::write_volatile(window, config.window)
-            }
-            let cs2: *mut u8 = (*WDOG::ptr()).cs2.as_ptr();
-            core::ptr::write_volatile(
-                cs2,
-                ((config.windowed as u8) << 7)
-                    | ((config.prescale as u8) << 4)
-                    | (config.clock as u8),
-            );
-            let cs1: *mut u8 = (*WDOG::ptr()).cs1.as_ptr();
-            core::ptr::write_volatile(
-                cs1,
-                0x80 | ((config.interrupt as u8) << 6)
-                    | ((config.debug_mode as u8) << 2)
-                    | ((config.wait_mode as u8) << 1)
-                    | (config.stop_mode as u8),
-            );
+        // The 16bit watchdog registers are in big-endian format
+        self.peripheral
+            .wdog_toval()
+            .write(|w| unsafe { w.bits(config.period.swap_bytes()) });
+        if config.windowed {
+            self.peripheral
+                .wdog_win()
+                .write(|w| unsafe { w.bits(config.window.swap_bytes()) });
         }
-        // This is rusty, but not fast enough to fit in the 128 bit window?
-        // self.peripheral
-        //     .wdog_toval()
-        //     .write(|w| unsafe { w.bits(config.period) });
-        // if config.windowed {
-        //     self.peripheral
-        //         .wdog_win()
-        //         .write(|w| unsafe { w.bits(config.window) });
-        // }
-        // self.peripheral.cs2.modify(|_, w| {
-        //     w.win()
-        //         .bit(config.windowed)
-        //         .pres()
-        //         .bit(config.prescale)
-        //         .clk()
-        //         .bits(config.clock.clone() as u8) // why does only this one move from config?
-        // });
-        // self.peripheral.cs1.modify(|_, w| {
-        //     w.int()
-        //         .bit(config.interrupt)
-        //         .dbg()
-        //         .bit(config.debug_mode)
-        //         .wait()
-        //         .bit(config.wait_mode)
-        //         .stop()
-        //         .bit(config.stop_mode)
-        //         .en()
-        //         ._1()
-        // });
+        self.peripheral.cs2.modify(|_, w| {
+            w.win()
+                .bit(config.windowed)
+                .pres()
+                .bit(config.prescale)
+                .clk()
+                .bits(config.clock.clone() as u8) // why does only this one move from config?
+        });
+        self.peripheral.cs1.modify(|_, w| {
+            w.int()
+                .bit(config.interrupt)
+                .dbg()
+                .bit(config.debug_mode)
+                .wait()
+                .bit(config.wait_mode)
+                .stop()
+                .bit(config.stop_mode)
+                .en() // Enable the Watchdog
+                ._1()
+                .update() // Allow to be updateable (locked, not sealed)
+                ._1()
+        });
 
         WatchDog {
             _enable: PhantomData,
@@ -239,7 +251,7 @@ impl WatchDog<Enabled, Unlocked> {
 }
 
 impl WatchDog<Enabled, Locked> {
-    /// Disable
+    /// Unlock and disable the WatchDog
     pub fn into_disabled(self) -> WatchDog<Disabled, Locked> {
         interrupt::free(|cs| {
             unlock(cs);
@@ -268,10 +280,21 @@ impl<UpdateState> WatchDog<Enabled, UpdateState> {
                 .write(|w| unsafe { w.cnt().bits(0x80B4) });
         });
     }
+
+    /// Return the current value of the watchdog's counter
+    ///
+    /// This function swaps the bytes from the big endian registers to little
+    /// endian representation used.
+    pub fn counts(&self) -> u16 {
+        self.peripheral.wdog_cnt().read().bits().swap_bytes()
+    }
 }
 
 impl<State> WatchDog<State, Locked> {
     /// Unlock, enable, and reconfigure
+    ///
+    /// Note: Configuring in a locked state with the debugger attached will
+    /// trigger an immediate reset.
     pub fn configure(self, config: WDogConfig) -> WatchDog<Enabled, Locked> {
         interrupt::free(|cs| {
             unlock(cs);
@@ -291,6 +314,8 @@ impl<State> WatchDog<State, Locked> {
     pub fn into_sealed(self) -> WatchDog<State, Sealed> {
         interrupt::free(|cs| {
             unlock(cs);
+
+            // Relock everything with current value, except unset update
             self.peripheral
                 .wdog_toval()
                 .modify(|r, w| unsafe { w.bits(r.bits()) });
