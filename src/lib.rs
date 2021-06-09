@@ -77,6 +77,7 @@ pub mod clocks;
 pub mod gpio;
 pub mod port;
 pub mod prelude;
+pub mod system;
 
 /// State of Peripheral
 pub mod init_state {
@@ -89,4 +90,18 @@ pub mod init_state {
 
 mod private {
     pub trait Sealed {}
+}
+
+/// This trait implements split method onto PAC peripheral structs.
+pub trait HALExt {
+    /// The HAL interface struct
+    type T;
+
+    /// Consume the PAC struct, split it into reasonable parts, and return them
+    /// in an interface struct.
+    ///
+    /// Each HAL module implements user friendly interface methods onto the
+    /// the returned struct(s). See the documentation for the HAL module of
+    /// interest for more details about the interface.
+    fn split(self) -> Self::T;
 }
