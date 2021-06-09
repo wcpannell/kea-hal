@@ -34,21 +34,10 @@
 //! implemented by their repsective modules. For example SIM_PINSEL\[UART0\] is
 //! handled within the UART (software) module.
 
-use crate::pac::SIM;
+use crate::{pac::SIM, HALExt};
 
-/// A trait to implement a method that will take ownership of the SIM
-/// peripheral and return an interface for it.
-pub trait SIMExt {
-    /// A struct containing fields exposed directly through this peripheral's
-    /// interface.
-    type Sim;
-
-    /// Grab the SIM peripheral and split out the useful chunks
-    fn split(self) -> Self::Sim;
-}
-
-impl SIMExt for SIM {
-    type Sim = Sim;
+impl HALExt for SIM {
+    type T = Sim;
     /// Split the SIM peripheral into useful chunks
     fn split(self) -> Sim {
         Sim {

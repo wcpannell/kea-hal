@@ -136,7 +136,7 @@ pub enum WDogClock {
     ExtRefClock = 3,
 }
 
-/// The interface presented to the user.
+/// The Watchdog interface presented to the user.
 pub struct WatchDog<State, UpdateState> {
     _enable: PhantomData<State>,
     _update: PhantomData<UpdateState>,

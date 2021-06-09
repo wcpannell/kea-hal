@@ -36,16 +36,6 @@ pub enum Error {
     OutofBounds,
 }
 
-/// A trait to implement a method that will take ownership of the PMC
-/// peripheral and return an interface struct for it.
-pub trait PMCExt {
-    /// The interface struct returned by split
-    type Pmc;
-    /// Grab the PMC peripheral, split it up, and shove it into the interface
-    /// structure.
-    fn split(self) -> Self::Pmc;
-}
-
 impl HALExt for PMC {
     type T = Pmc<Enabled, _2v6>;
     fn split(self) -> Pmc<Enabled, _2v6> {

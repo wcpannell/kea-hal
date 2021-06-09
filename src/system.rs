@@ -52,7 +52,7 @@
 //! Provides Hardware-based atomic read-modify-write memory operations on
 //! peripherals' memory mapped registers? Referred to as decorated storage.
 //!
-//! "The resulting architectural capability defined by this core paltform
+//! "The resulting architectural capability defined by this core platform
 //! function is targeted at the manipulation of n-bit fields in peripheral
 //! registers and is consistent with I/O hardware addressing in the Embedded C
 //! Standard. For most BME commands, a single core read or write bus cycle is
@@ -65,6 +65,3 @@
 pub mod pmc;
 pub mod sim;
 pub mod watchdog;
-
-pub use pmc::PMCExt;
-pub use sim::SIMExt;

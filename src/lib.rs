@@ -92,10 +92,16 @@ mod private {
     pub trait Sealed {}
 }
 
-/// A trait to consume a peripheral and return its HAL interface.
+/// This trait implements split method onto PAC peripheral structs.
 pub trait HALExt {
-    /// The HAL WatchDog Interface Struct
+    /// The HAL interface struct
     type T;
-    /// Consume the HAL and split parts into the Interface Struct
+
+    /// Consume the PAC struct, split it into reasonable parts, and return them
+    /// in an interface struct.
+    ///
+    /// Each HAL module implements user friendly interface methods onto the
+    /// the returned struct(s). See the documentation for the HAL module of
+    /// interest for more details about the interface.
     fn split(self) -> Self::T;
 }
