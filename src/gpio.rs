@@ -199,15 +199,16 @@ macro_rules! gpio {
                             let gpio = &(*$GPIOx::ptr());
                             let port = &(*PORT::ptr());
 
-                            // Turn off Pull Up
+                            // Turn off Pull Up (1 = pullup)
                             port.$puex.modify(|r, w| {
                                 w.bits(r.bits() & !(1 << $i))
                             });
 
-                            // Set to Input
+                            // Set to Input (0 = input)
                             gpio.pddr.modify(|r, w| {
                                 w.bits(r.bits() & !(1 << $i))
                             });
+                            // 0 = input
                             gpio.pidr.modify(|r, w| {
                                 w.bits(r.bits() & !(1 << $i))
                             });
@@ -222,16 +223,19 @@ macro_rules! gpio {
                             let port = &(*PORT::ptr());
 
                             // Set to Input
+                            // 0 = input, 1 = output
                             gpio.pddr.modify(|r, w| {
                                 w.bits(r.bits() & !(1 << $i))
                             });
+                            // 0 = input, 1 = output
                             gpio.pidr.modify(|r, w| {
                                 w.bits(r.bits() & !(1 << $i))
                             });
 
                             // Turn on Pull Up
+                            // 1 = on, 0 = off
                             port.$puex.modify(|r, w| {
-                                w.bits(r.bits() & !(1 << $i))
+                                w.bits(r.bits() | (1 << $i))
                             });
 
                         }
