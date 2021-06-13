@@ -72,7 +72,7 @@ pub extern crate void;
 
 pub use pac::CorePeripherals;
 
-//pub mod adc;
+pub mod adc;
 pub mod clocks;
 pub mod gpio;
 pub mod port;
