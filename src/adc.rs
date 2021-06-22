@@ -1,7 +1,58 @@
 //! The ADC Interface
 //!
-//! The ADC can be polled for conversion completion with [Adc::is_done]. Completion
-//! will trigger an ADC Interrupt if enabled. See [Adc::into_interrupt]
+//! The ADC can be polled for conversion completion with [Adc::is_done].
+//! Completion will trigger an ADC Interrupt if enabled. See
+//! [Adc::into_interrupt]
+//!
+//! ## Input Modes
+//!
+//! The Adc peripheral can operate in either single input or FIFO modes. Single
+//! input mode is the mode most commonly thought of when using an ADC. A
+//! multiplexer (via Adc::set_channel) is used to connect a single channel to
+//! the ADC, and when the conversion is complete the hardware makes the results
+//! available in the results register. the the software either selects a new
+//! channel or restarts the conversion on the same channel.
+//!
+//! The FIFO mode sets up a hardware buffer of selectable depth (2-8 channels).
+//! Once the buffer is filled the Adc peripheral shoves the buffer contents
+//! into the multiplexer channel by channel. Likewise, as each conversion is
+//! completed the results are buffered into the result register in the same
+//! order as the channel select buffer.
+//!
+//! Note: FIFO mode is not yet implemented in this HAL
+//!
+//! ## Conversion Modes
+//!
+//! The Adc peripheral offers 2 conversion modes, OneShot and Continuous. In
+//! OneShot mode, the conversion is started when the channel is selected (or
+//! when the channel select buffer is filled in FIFO mode). After completion no
+//! new conversion is started until the channel is set again, even if the same
+//! channel is used.
+//!
+//! In Continuous mode a new conversion is started immediately
+//! after the previous one is completed. Changing the channel interrupts the
+//! conversion and immediately begins conversion on the new channel (unless the
+//! new channel is [DummyDisable], then the conversion is allowed to complete,
+//! but no new conversion is started). In FIFO mode the input FIFO is reloaded
+//! after completion, in other words the same N values are converted on a loop.
+//!
+//! Note: Continuous mode is not yet implemented in this HAL
+//!
+//! ## Comparison Mode
+//!
+//! Note: Comparison mode is not yet implemented in this HAL
+//!
+//! Comparison mode is a hardware feature of the Adc Peripheral. If set, the
+//! conversion result is compared to the comparison value. If the result
+//! is greater than or less than (depending on configuration) the comparison
+//! value the result is moved into the result register. Otherwise, the result
+//! is discarded \[Note: Unsure if the conversion is restarted in OneShot
+//! mode\].
+//!
+//! A common use case for comparison mode is to enter a low power state with
+//! the Adc configured to use the asynchronous clock source and to generate an
+//! interrupt on completion. When the input channel crosses the comparison
+//! threshold the interrupt is triggered, waking the MCU.
 //!
 //! ## Clocking
 //!
@@ -23,18 +74,13 @@
 //!
 //! ## Pin Control
 //!
-//! The ADC Peripheral can take the GPIO pins in any state. The Peripheral will
-//! reconfigure the pin to turn off any output drivers (i.e. HighImpedence
-//! state), disable input buffers (reading the pin after configuring as analog
-//! will return a zero), and disable the pullup.
+//! This functionality is implemented in the GPIO module. See [crate::gpio::Analog]
+//! for details.
 //!
-//! Once a pin is released from the ADC, it will return to its previous state.
-//! The previous state includes output enabled, input enabled, pullup enabled,
-//! and level (for outputs).
+//! ## Conversion Width
 //!
-//! ## Conversion Width - [AdcResolution]
-//!
-//! The ADC can be run in 8, 10, or 12 bit modes
+//! The ADC can be run in 8, 10, or 12 bit modes. These modes are enumerated in
+//! [AdcResolution].
 //!
 //! ## Hardware Trigger
 //!
@@ -64,6 +110,12 @@ use crate::hal::adc::{Channel, OneShot};
 use crate::{pac::ADC, HALExt};
 use core::{convert::Infallible, marker::PhantomData};
 use embedded_time::rate::*;
+
+/// Error Enumeration for this module
+pub enum Error {
+    /// The Channel has already been moved
+    Moved,
+}
 
 /// State type fore ADC Peripheral
 pub struct Adc<State> {
@@ -144,7 +196,7 @@ impl AdcConfig {
                 err = err.abs();
             }
             if err <= err_old {
-                output = output << 1;
+                output <<= 1;
                 err_old = err;
             } else {
                 break;
@@ -282,9 +334,9 @@ impl Adc<Enabled> {
     /// Poll for conversion completion, if done return the result.
     pub fn try_result(&self) -> Option<u16> {
         if self.is_done() {
-            return Some(self.result());
+            Some(self.result())
         } else {
-            return None;
+            None
         }
     }
 
@@ -308,6 +360,7 @@ impl<Mode> Adc<Mode> {
     /// Set the ADC's configuration
     pub fn configure(self, config: AdcConfig) -> Adc<Enabled> {
         self.peripheral.sc3.modify(|_, w| {
+            use pac::adc::sc3::{ADICLK_A, ADIV_A, ADLSMP_A, MODE_A};
             w.adiclk()
                 .variant(match config.clock_source {
                     AdcClocks::Bus =>
@@ -315,68 +368,84 @@ impl<Mode> Adc<Mode> {
                     // the 1:1 Bus clock source
                     {
                         match config.clock_divisor {
-                            ClockDivisor::_16 => pac::adc::sc3::ADICLK_A::_01,
-                            _ => pac::adc::sc3::ADICLK_A::_00,
+                            ClockDivisor::_16 => ADICLK_A::_01,
+                            _ => ADICLK_A::_00,
                         }
                     }
-                    AdcClocks::External => pac::adc::sc3::ADICLK_A::_10,
-                    AdcClocks::Async => pac::adc::sc3::ADICLK_A::_11,
+                    AdcClocks::External => ADICLK_A::_10,
+                    AdcClocks::Async => ADICLK_A::_11,
                 })
                 .mode()
                 .variant(match config.resolution {
-                    AdcResolution::_8bit => pac::adc::sc3::MODE_A::_00,
-                    AdcResolution::_10bit => pac::adc::sc3::MODE_A::_01,
-                    AdcResolution::_12bit => pac::adc::sc3::MODE_A::_11,
+                    AdcResolution::_8bit => MODE_A::_00,
+                    AdcResolution::_10bit => MODE_A::_01,
+                    AdcResolution::_12bit => MODE_A::_11,
                 })
                 .adlsmp()
                 .variant(match config.sample_time {
-                    AdcSampleTime::Short => pac::adc::sc3::ADLSMP_A::_0,
-                    AdcSampleTime::Long => pac::adc::sc3::ADLSMP_A::_1,
+                    AdcSampleTime::Short => ADLSMP_A::_0,
+                    AdcSampleTime::Long => ADLSMP_A::_1,
                 })
                 .adiv()
                 .variant(match config.clock_divisor {
-                    ClockDivisor::_1 => pac::adc::sc3::ADIV_A::_00,
-                    ClockDivisor::_2 => pac::adc::sc3::ADIV_A::_01,
-                    ClockDivisor::_4 => pac::adc::sc3::ADIV_A::_10,
-                    _ => pac::adc::sc3::ADIV_A::_11,
+                    ClockDivisor::_1 => ADIV_A::_00,
+                    ClockDivisor::_2 => ADIV_A::_01,
+                    ClockDivisor::_4 => ADIV_A::_10,
+                    _ => ADIV_A::_11,
                 })
                 .adlpc()
                 .bit(config.low_power)
         });
+
+        // If using the bus clock, connect the bus clock to the adc via
+        // the SIM peripheral.
+        unsafe { &(*pac::SIM::ptr()) }.scgc.modify(|_, w| {
+            use pac::sim::scgc::ADC_A;
+            w.adc().variant(match config.clock_source {
+                AdcClocks::Bus => ADC_A::_1,
+                _ => ADC_A::_0,
+            })
+        });
         Adc {
             peripheral: self.peripheral,
             _state: PhantomData,
-            onchip_channels: OnChipChannels {
-                vss: Some(Vss::<Input> { _mode: PhantomData }),
-                temp_sense: Some(TempSense::<Input> { _mode: PhantomData }),
-                bandgap: Some(Bandgap::<Input> { _mode: PhantomData }),
-                vref_h: Some(VrefH::<Input> { _mode: PhantomData }),
-                vref_l: Some(VrefL::<Input> { _mode: PhantomData }),
-            },
+            onchip_channels: self.onchip_channels,
         }
     }
 
     /// Not Implemented
     pub fn into_interrupt(self) -> Adc<Mode> {
-        Adc::<Mode> {
-            peripheral: self.peripheral,
-            _state: PhantomData,
-            onchip_channels: OnChipChannels {
-                vss: Some(Vss::<Input> { _mode: PhantomData }),
-                temp_sense: Some(TempSense::<Input> { _mode: PhantomData }),
-                bandgap: Some(Bandgap::<Input> { _mode: PhantomData }),
-                vref_h: Some(VrefH::<Input> { _mode: PhantomData }),
-                vref_l: Some(VrefL::<Input> { _mode: PhantomData }),
-            },
-        };
         unimplemented!("Interrupt is not yet implemented");
+        // Adc::<Mode> {
+        //     peripheral: self.peripheral,
+        //     _state: PhantomData,
+        //     onchip_channels: self.onchip_channels,
+        // }
+    }
+
+    /// Not Implemented
+    pub fn into_fifo(self, _depth: u8) -> Adc<Mode> {
+        // self.peripheral
+        //     .sc4
+        //     .modify(|_r, w| w.afdep().bits(depth & 0x7));
+        // Adc::<Mode> {
+        //     peripheral: self.peripheral,
+        //     _state: PhantomData,
+        //     onchip_channels: self.onchip_channels,
+        // }
+        unimplemented!("FIFO is not yet implemented");
+    }
+
+    /// Not Implemented
+    pub fn into_continuous(self) -> Adc<Mode> {
+        unimplemented!("Continuous Conversion mode not yet implemented");
     }
 }
 
 impl OnChipChannels {
     /// Request an instance of an on-chip Adc Input Channel
-    pub fn vss(&mut self) -> Result<Vss<Input>, ()> {
-        Ok(self.vss.take().ok_or(())?)
+    pub fn vss(&mut self) -> Result<Vss<Input>, Error> {
+        self.vss.take().ok_or(Error::Moved)
     }
 
     /// Return the instance of Vss
@@ -385,8 +454,8 @@ impl OnChipChannels {
     }
 
     /// Try to grab an instance of the onchip TempSense channel.
-    pub fn tempsense(&mut self) -> Result<TempSense<Input>, ()> {
-        Ok(self.temp_sense.take().ok_or(())?)
+    pub fn tempsense(&mut self) -> Result<TempSense<Input>, Error> {
+        self.temp_sense.take().ok_or(Error::Moved)
     }
 
     /// Return the instance of Vss
@@ -395,8 +464,8 @@ impl OnChipChannels {
     }
 
     /// Try to grab an instance of the onchip Bandgap channel.
-    pub fn bandgap(&mut self) -> Result<Bandgap<Input>, ()> {
-        Ok(self.bandgap.take().ok_or(())?)
+    pub fn bandgap(&mut self) -> Result<Bandgap<Input>, Error> {
+        self.bandgap.take().ok_or(Error::Moved)
     }
 
     /// Return the instance of Bandgap
@@ -405,8 +474,8 @@ impl OnChipChannels {
     }
 
     /// Try to grab an instance of the onchip Voltage Reference High Channel.
-    pub fn vref_h(&mut self) -> Result<VrefH<Input>, ()> {
-        Ok(self.vref_h.take().ok_or(())?)
+    pub fn vref_h(&mut self) -> Result<VrefH<Input>, Error> {
+        self.vref_h.take().ok_or(Error::Moved)
     }
 
     /// Return the instance of VrefH
@@ -415,8 +484,8 @@ impl OnChipChannels {
     }
 
     /// Try to grab an instance of the onchip Voltage Reference Low Channel.
-    pub fn vref_l(&mut self) -> Result<VrefL<Input>, ()> {
-        Ok(self.vref_l.take().ok_or(())?)
+    pub fn vref_l(&mut self) -> Result<VrefL<Input>, Error> {
+        self.vref_l.take().ok_or(Error::Moved)
     }
 
     /// Return the instance of VrefL
@@ -444,38 +513,39 @@ pub struct Input;
 
 /// Adc Input Channel, measures ground (should be 0?)
 pub struct Vss<Input> {
-    _mode: core::marker::PhantomData<Input>,
+    _mode: PhantomData<Input>,
 }
 
 /// Adc Input Channel, measures internal temperature sensor
 pub struct TempSense<Input> {
-    _mode: core::marker::PhantomData<Input>,
+    _mode: PhantomData<Input>,
 }
 
 /// Adc Input Channel, Bandgap internal voltage reference
 pub struct Bandgap<Input> {
-    _mode: core::marker::PhantomData<Input>,
+    _mode: PhantomData<Input>,
 }
 
 /// Adc Input Channel, Voltage Reference, High
 pub struct VrefH<Input> {
-    _mode: core::marker::PhantomData<Input>,
+    _mode: PhantomData<Input>,
 }
 
 /// Adc Input Channel, Voltage Reference, Low
 pub struct VrefL<Input> {
-    _mode: core::marker::PhantomData<Input>,
+    _mode: PhantomData<Input>,
 }
 
 /// Dummy Channel that temporarily disables the Adc Module.
 pub struct DummyDisable<Input> {
-    _mode: core::marker::PhantomData<Input>,
+    _mode: PhantomData<Input>,
 }
 
 macro_rules! adc_input_channels {
     ( $($Chan:expr => $Pin:ident),+ $(,)*) => {
+        use crate::gpio::Analog;
         $(
-            impl<Mode> Channel<Adc<Enabled>> for $Pin<Mode> {
+            impl<OldMode> Channel<Adc<Enabled>> for Analog<$Pin<OldMode>> {
                 type ID = u8;
                 fn channel() -> u8 { $Chan }
             }

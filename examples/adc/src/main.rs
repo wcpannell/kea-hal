@@ -24,65 +24,43 @@ pub fn pin_state() -> State {
     }
 }
 
-pub fn adc_read(chan: u8) -> u16 {
-    // Don't need to change anythign in sc2
-    // start conversion in sc1
-    let periph = unsafe { &(*pac::ADC::ptr()) };
-    periph.sc1.modify(|_, w| unsafe { w.adch().bits(chan) });
-
-    // wait for conversion
-    while periph.sc2.read().adact().bit_is_set() {
-        cortex_m::asm::nop();
-    }
-
-    periph.r.read().adr().bits()
-}
-
 #[entry]
 fn main() -> ! {
     let _cp = cortex_m::Peripherals::take().unwrap();
     let dp = pac::Peripherals::take().unwrap();
 
     let gpioa = dp.GPIOA.split();
+    let adc = dp.ADC.split();
 
     // set pot to something so we can verify its return type after
     // releasing from adc.
-    let state = pin_state();
+    let _state = pin_state();
     let pot = gpioa.ptc2.into_pull_up_input(); // Should measure value
     let ptc3 = gpioa.ptc3.into_pull_up_input(); // should be in this state after releaseing
     let mut ptb3 = gpioa.ptb3.into_push_pull_output(); // should be in this state after releasing
 
     ptb3.set_high().unwrap();
 
-    let state = pin_state();
+    let _state = pin_state();
 
-    let init_binval = pot.is_high();
+    let _init_binval = pot.is_high();
 
-    // Turn on ADC peripheral
-    dp.SIM.scgc.modify(|_, w| w.adc()._1());
-
-    // turn pot (PTC2/AD10) into an adc channel
-    dp.ADC
-        .apctl1
-        .write(|w| unsafe { w.adpc().bits((1 << 11) | (1 << 10) | (1 << 7)) });
+    // turn pot (PTC2/AD10) and ptc3 into adc channels
+    let mut pot = pot.into_analog();
+    let mut ptc3 = ptc3.into_analog();
 
     // setup adc clock (bus clock is 16MHz by default)
-    dp.ADC.sc3.write(
-        |w| {
-            w.adiclk()
-                ._01() // bus clock/2
-                .mode()
-                ._10()
-        }, // 12-bit measurement
-    );
+    let config: hal::adc::AdcConfig = Default::default(); // the default is okay for this
+    let mut adc = adc.configure(config);
 
-    let pot_val = adc_read(10);
-    let pc3_val = adc_read(11);
+    let _pot_val = adc.read(&mut pot);
+    let _pc3_val = adc.read(&mut ptc3);
 
-    // return to normal pin
-    dp.ADC.apctl1.reset();
+    // return to normal pins
+    let _pot = pot.outof_analog();
+    let _ptc3 = ptc3.outof_analog();
 
-    let state = pin_state();
+    let _state = pin_state();
 
     loop {
         cortex_m::asm::nop();
