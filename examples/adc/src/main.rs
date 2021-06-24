@@ -32,6 +32,13 @@ fn main() -> ! {
     let gpioa = dp.GPIOA.split();
     let adc = dp.ADC.split();
 
+    // setup adc clock (bus clock is 16MHz by default).
+    // Adc has to be in Enabled State (specifically, SIM.scgc[adc] == 1) before
+    // touching the peripheral, including calling into_analog on a pin.
+    // Failing to do so causes hardfault.
+    let config: hal::adc::AdcConfig = Default::default(); // the default is okay for this
+    let mut adc = adc.configure(config);
+
     // set pot to something so we can verify its return type after
     // releasing from adc.
     let _state = pin_state();
@@ -48,10 +55,6 @@ fn main() -> ! {
     // turn pot (PTC2/AD10) and ptc3 into adc channels
     let mut pot = pot.into_analog();
     let mut ptc3 = ptc3.into_analog();
-
-    // setup adc clock (bus clock is 16MHz by default)
-    let config: hal::adc::AdcConfig = Default::default(); // the default is okay for this
-    let mut adc = adc.configure(config);
 
     let _pot_val = adc.read(&mut pot);
     let _pc3_val = adc.read(&mut ptc3);

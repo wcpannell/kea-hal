@@ -41,6 +41,9 @@ pub struct Output<MODE> {
 
 /// Analog type state.
 ///
+/// ADC MUST BE ENABLED BEFORE CALLING into_analog ON A PIN OR THE MCU WILL
+/// HARDFAULT!
+///
 /// This mode "gives" the pin to the ADC hardware peripheral.
 /// The ADC Peripheral can take the GPIO pins in any state. The Peripheral will
 /// reconfigure the pin to turn off any output drivers, disable input buffers
@@ -444,10 +447,14 @@ macro_rules! gpio {
                     /// be used to return the pin to a normal Input/Output
                     /// typestate.
                     pub fn into_analog(self) -> Analog<$AnalogPin<MODE>> {
-                        let adc = unsafe {&(*ADC::ptr())};
-                        adc.apctl1.modify(|r, w| unsafe {
-                            w.adpc().bits(r.adpc().bits() | (1 << $AnalogIndex))
-                        });
+                        unsafe {
+                            (*ADC::ptr())
+                                .apctl1
+                                .modify(|r, w| w.adpc().bits(
+                                        r.adpc().bits() | (1 << $AnalogIndex)
+                                        )
+                                    );
+                        }
                         Analog { _oldmode: PhantomData}
                     }
                 }

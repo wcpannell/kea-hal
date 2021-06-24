@@ -1,6 +1,6 @@
 [package]
 name = "kea-hal"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["W. Clayton Pannell <clayton.pannell@gmail.com>"]
 edition = "2018"
 description = "HAL for NXP KEA devices."
