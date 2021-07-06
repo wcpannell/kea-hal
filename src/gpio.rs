@@ -39,39 +39,6 @@ pub struct Output<MODE> {
     _mode: PhantomData<MODE>,
 }
 
-/// Analog type state.
-///
-/// ADC MUST BE ENABLED BEFORE CALLING into_analog ON A PIN OR THE MCU WILL
-/// HARDFAULT!
-///
-/// This mode "gives" the pin to the ADC hardware peripheral.
-/// The ADC Peripheral can take the GPIO pins in any state. The Peripheral will
-/// reconfigure the pin to turn off any output drivers, disable input buffers
-/// (reading the pin after configuring as analog will return a zero), and
-/// disable the pullup (i.e. HighImpedence state).
-///
-/// Once a pin is released from the ADC, it will return to its previous state.
-/// The previous state includes output enabled, input enabled, pullup enabled,
-/// and level (for outputs). Note to accomplish this the pin implements the
-/// outof_analog method, which is semantically different from the other type
-/// states.
-///
-/// For example, [gpioa::PTA0] is configured to be a Output that is set high is
-/// converted into the analog mode with the [gpioa::PTA0::into_analog] method.
-/// Once measurements from that pin are completed it will be returned to an
-/// Output that is set high by calling the [Analog::outof_analog] method.
-///
-/// Note: This is a hardware feature that requires effectively no clock cycles
-/// to complete. "Manually" reconfiguring the pins to HighImpedence before
-/// calling into_analog() is discouraged, but it would not hurt anything.
-// This type needs to be in this module so we can freely re-instantiate the Pin
-// type returned from outof_analog. This can be moved to Analog if the Pin types
-// implement a constructor method. It seems slightly more cohesive to have the
-// Analog wrapper type here compared to adding a constructor just for this.
-pub struct Analog<OldMode> {
-    _oldmode: PhantomData<OldMode>,
-}
-
 /// Floating input type state
 pub struct Floating;
 
@@ -91,17 +58,16 @@ macro_rules! gpio {
     ($GPIOx:ident, $gpiox:ident, $puex: ident,
      [ $($PTX:ident: $PTXn:expr,)+ ],
      [ $($PTXi:ident: ($ptxi:ident, $i:expr, $FLTOffset:expr),)+ ],
-     [ $($HighDrivePin:ident: ($i2:expr, $HighDriveIndex:expr),)+ ],
-     [ $($AnalogIndex:expr => $AnalogPin:ident,)+
+     [ $($HighDrivePin:ident: ($i2:expr, $HighDriveIndex:expr),)+
      ]) => {
 
         /// GPIO Port Module
         pub mod $gpiox {
-            use super::{Analog, PushPull, PullUp, HighDrive, HighImpedence,
+            use super::{PushPull, PullUp, HighDrive, HighImpedence,
             Floating, Input, Output, GPIOExt, DefaultMode
             };
             use crate::hal::digital::v2::{ToggleableOutputPin, InputPin, OutputPin, StatefulOutputPin};
-            use crate::pac::{$GPIOx, PORT, ADC};
+            use crate::pac::{$GPIOx, PORT};
             use core::marker::PhantomData;
             use core::convert::Infallible;
 
@@ -205,21 +171,21 @@ macro_rules! gpio {
                 // What is this Into business? I don't remember!
                 // What is the interface like? Where did I see this?
 
-                impl Into<$PTXi<Input<PullUp>>> for $PTXi<DefaultMode> {
-                    fn into(self) -> $PTXi<Input<PullUp>> {
-                        self.into_pull_up_input()
+                impl From<$PTXi<DefaultMode>> for $PTXi<Input<PullUp>> {
+                    fn from(pin: $PTXi<DefaultMode>) -> $PTXi<Input<PullUp>> {
+                        pin.into_pull_up_input()
                     }
                 }
 
-                impl Into<$PTXi<Input<Floating>>> for $PTXi<DefaultMode> {
-                    fn into(self) -> $PTXi<Input<Floating>> {
-                        self.into_floating_input()
+                impl From<$PTXi<DefaultMode>> for $PTXi<Input<Floating>> {
+                    fn from(pin: $PTXi<DefaultMode>) -> $PTXi<Input<Floating>> {
+                        pin.into_floating_input()
                     }
                 }
 
-                impl Into<$PTXi<Output<PushPull>>> for $PTXi<DefaultMode> {
-                    fn into(self) -> $PTXi<Output<PushPull>> {
-                        self.into_push_pull_output()
+                impl From<$PTXi<DefaultMode>> for $PTXi<Output<PushPull>> {
+                    fn from(pin: $PTXi<DefaultMode>) -> $PTXi<Output<PushPull>> {
+                        pin.into_push_pull_output()
                     }
                 }
 
@@ -395,9 +361,15 @@ macro_rules! gpio {
             )+
 
             $(
-                impl Into<$HighDrivePin<Output<HighDrive>>> for $HighDrivePin<DefaultMode> {
-                    fn into(self) -> $HighDrivePin<Output<HighDrive>> {
-                        self.into_high_drive_output()
+                // impl Into<$HighDrivePin<Output<HighDrive>>> for $HighDrivePin<DefaultMode> {
+                //     fn into(self) -> $HighDrivePin<Output<HighDrive>> {
+                //         self.into_high_drive_output()
+                //     }
+                // }
+
+                impl From<$HighDrivePin<DefaultMode>> for $HighDrivePin<Output<HighDrive>> {
+                    fn from(pin: $HighDrivePin<DefaultMode>) -> $HighDrivePin<Output<HighDrive>> {
+                        pin.into_high_drive_output()
                     }
                 }
 
@@ -435,38 +407,6 @@ macro_rules! gpio {
                         }
 
                         $HighDrivePin {_mode: PhantomData}
-                    }
-                }
-            )+
-            $(
-                impl<MODE> $AnalogPin<MODE> {
-                    /// Convert Pin into the [Analog] state for use by the ADC.
-                    ///
-                    /// Note, this is a restrictive mode for use only by the
-                    /// ADC. The [$gpiox::$AnalogPin::outof_analog] method must
-                    /// be used to return the pin to a normal Input/Output
-                    /// typestate.
-                    pub fn into_analog(self) -> Analog<$AnalogPin<MODE>> {
-                        unsafe {
-                            (*ADC::ptr())
-                                .apctl1
-                                .modify(|r, w| w.adpc().bits(
-                                        r.adpc().bits() | (1 << $AnalogIndex)
-                                        )
-                                    );
-                        }
-                        Analog { _oldmode: PhantomData}
-                    }
-                }
-
-                impl<OldMode> Analog<$AnalogPin<OldMode>> {
-                    /// Return Analog pin to a normal pin state.
-                    pub fn outof_analog(self) -> $AnalogPin<OldMode> {
-                        let adc = unsafe {&(*ADC::ptr())};
-                        adc.apctl1.modify(|r, w| unsafe {
-                            w.adpc().bits(r.adpc().bits() & !(1 << $AnalogIndex))
-                        });
-                        $AnalogPin {_mode: PhantomData}
                     }
                 }
             )+
@@ -517,19 +457,6 @@ gpio!(GPIOA, gpioa, puel, [
     PTB5: (13, 1),
     PTD0: (24, 2),
     PTD1: (25, 3),
-], [
-    0_u8 => PTA0,
-    1_u8 => PTA1,
-    2_u8 => PTA6,
-    3_u8 => PTA7,
-    4_u8 => PTB0,
-    5_u8 => PTB1,
-    6_u8 => PTB2,
-    7_u8 => PTB3,
-    8_u8 => PTC0,
-    9_u8 => PTC1,
-    10_u8 => PTC2,
-    11_u8 => PTC3,
 ]);
 
 gpio!(GPIOB, gpiob, pueh, [
@@ -568,16 +495,4 @@ gpio!(GPIOB, gpiob, pueh, [
     PTE1: (1, 5),
     PTH0: (24, 6),
     PTH1: (25, 7),
-], [
-    12_u8 => PTF4,
-    13_u8 => PTF5,
-    14_u8 => PTF6,
-    15_u8 => PTF7,
 ]);
-
-// fn thingy() {
-//     unsafe {
-//         let gpioa = &(*pac::GPIOA::ptr());
-//         let port = &(*pac::PORT::ptr());
-//     }
-// }

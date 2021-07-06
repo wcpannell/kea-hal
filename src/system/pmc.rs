@@ -24,7 +24,7 @@
 //!
 //! The PMC contains a field that enables the internal buffer for the
 //! bandgap voltage reference used by the ADC adn ACMP peripherals. This is
-//! impelemented in those areas.
+//! impelemented in those areas. See [crate::adc::OnChipChannels::bandgap]
 
 use crate::{pac::PMC, HALExt};
 use core::marker::PhantomData;

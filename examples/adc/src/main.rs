@@ -4,7 +4,7 @@
 use kea_hal as hal;
 
 use cortex_m_rt::entry;
-use embedded_hal::digital::v2::{InputPin, OutputPin};
+use embedded_hal::digital::v2::{InputPin, OutputPin, StatefulOutputPin};
 use hal::{pac, prelude::*};
 use panic_halt as _;
 
@@ -36,7 +36,8 @@ fn main() -> ! {
     // Adc has to be in Enabled State (specifically, SIM.scgc[adc] == 1) before
     // touching the peripheral, including calling into_analog on a pin.
     // Failing to do so causes hardfault.
-    let config: hal::adc::AdcConfig = Default::default(); // the default is okay for this
+    let mut config: hal::adc::AdcConfig = Default::default();
+    config.clock_divisor = hal::adc::ClockDivisor::_2;
     let mut adc = adc.configure(config);
 
     // set pot to something so we can verify its return type after
@@ -55,15 +56,39 @@ fn main() -> ! {
     // turn pot (PTC2/AD10) and ptc3 into adc channels
     let mut pot = pot.into_analog();
     let mut ptc3 = ptc3.into_analog();
+    let mut ptb3 = ptb3.into_analog();
+    let mut temp = adc.onchip_channels.tempsense().unwrap();
+    let mut bandgap = adc.onchip_channels.bandgap().unwrap();
 
+    let _bg_val = adc.read(&mut bandgap).unwrap_or(0);
+    let _temp_val = adc.read(&mut temp).unwrap_or(0);
     let _pot_val = adc.read(&mut pot);
-    let _pc3_val = adc.read(&mut ptc3);
+    let _ptc3_val = adc.read(&mut ptc3);
+    let _ptb3_val = adc.read(&mut ptb3);
+
+    // // Verify this can't happen
+    // let _pot_adc_test = pot.into_analog();
+
+    // // Verify this can't happen
+    // let val = pot.is_high();
 
     // return to normal pins
-    let _pot = pot.outof_analog();
-    let _ptc3 = ptc3.outof_analog();
+    let pot = pot.outof_analog();
+    let ptc3 = ptc3.outof_analog();
+    let mut ptb3 = ptb3.outof_analog();
+    adc.onchip_channels.return_tempsense(temp);
+
+    // Verify this can happen
+    let _pot_bin_val = pot.is_high();
+    let _ptc3_bin_val = ptc3.is_high();
+    let _ptb3_bin_val = ptb3.is_set_high();
+    ptb3.set_low().unwrap();
 
     let _state = pin_state();
+
+    // verify we can grab the temp again
+    let mut new_temp = adc.onchip_channels.tempsense().unwrap();
+    let _new_temp_val = adc.read(&mut new_temp);
 
     loop {
         cortex_m::asm::nop();
