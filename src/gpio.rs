@@ -63,8 +63,8 @@ macro_rules! gpio {
 
         /// GPIO Port Module
         pub mod $gpiox {
-            use super::{PushPull, PullUp, HighDrive, HighImpedence, Floating,
-            Input, Output, GPIOExt, DefaultMode
+            use super::{PushPull, PullUp, HighDrive, HighImpedence,
+            Floating, Input, Output, GPIOExt, DefaultMode
             };
             use crate::hal::digital::v2::{ToggleableOutputPin, InputPin, OutputPin, StatefulOutputPin};
             use crate::pac::{$GPIOx, PORT};
@@ -171,21 +171,21 @@ macro_rules! gpio {
                 // What is this Into business? I don't remember!
                 // What is the interface like? Where did I see this?
 
-                impl Into<$PTXi<Input<PullUp>>> for $PTXi<DefaultMode> {
-                    fn into(self) -> $PTXi<Input<PullUp>> {
-                        self.into_pull_up_input()
+                impl From<$PTXi<DefaultMode>> for $PTXi<Input<PullUp>> {
+                    fn from(pin: $PTXi<DefaultMode>) -> $PTXi<Input<PullUp>> {
+                        pin.into_pull_up_input()
                     }
                 }
 
-                impl Into<$PTXi<Input<Floating>>> for $PTXi<DefaultMode> {
-                    fn into(self) -> $PTXi<Input<Floating>> {
-                        self.into_floating_input()
+                impl From<$PTXi<DefaultMode>> for $PTXi<Input<Floating>> {
+                    fn from(pin: $PTXi<DefaultMode>) -> $PTXi<Input<Floating>> {
+                        pin.into_floating_input()
                     }
                 }
 
-                impl Into<$PTXi<Output<PushPull>>> for $PTXi<DefaultMode> {
-                    fn into(self) -> $PTXi<Output<PushPull>> {
-                        self.into_push_pull_output()
+                impl From<$PTXi<DefaultMode>> for $PTXi<Output<PushPull>> {
+                    fn from(pin: $PTXi<DefaultMode>) -> $PTXi<Output<PushPull>> {
+                        pin.into_push_pull_output()
                     }
                 }
 
@@ -199,15 +199,16 @@ macro_rules! gpio {
                             let gpio = &(*$GPIOx::ptr());
                             let port = &(*PORT::ptr());
 
-                            // Turn off Pull Up
+                            // Turn off Pull Up (1 = pullup)
                             port.$puex.modify(|r, w| {
                                 w.bits(r.bits() & !(1 << $i))
                             });
 
-                            // Set to Input
+                            // Set to Input (0 = input)
                             gpio.pddr.modify(|r, w| {
                                 w.bits(r.bits() & !(1 << $i))
                             });
+                            // 0 = input
                             gpio.pidr.modify(|r, w| {
                                 w.bits(r.bits() & !(1 << $i))
                             });
@@ -222,16 +223,19 @@ macro_rules! gpio {
                             let port = &(*PORT::ptr());
 
                             // Set to Input
+                            // 0 = input, 1 = output
                             gpio.pddr.modify(|r, w| {
                                 w.bits(r.bits() & !(1 << $i))
                             });
+                            // 0 = input, 1 = output
                             gpio.pidr.modify(|r, w| {
                                 w.bits(r.bits() & !(1 << $i))
                             });
 
                             // Turn on Pull Up
+                            // 1 = on, 0 = off
                             port.$puex.modify(|r, w| {
-                                w.bits(r.bits() & !(1 << $i))
+                                w.bits(r.bits() | (1 << $i))
                             });
 
                         }
@@ -357,9 +361,15 @@ macro_rules! gpio {
             )+
 
             $(
-                impl Into<$HighDrivePin<Output<HighDrive>>> for $HighDrivePin<DefaultMode> {
-                    fn into(self) -> $HighDrivePin<Output<HighDrive>> {
-                        self.into_high_drive_output()
+                // impl Into<$HighDrivePin<Output<HighDrive>>> for $HighDrivePin<DefaultMode> {
+                //     fn into(self) -> $HighDrivePin<Output<HighDrive>> {
+                //         self.into_high_drive_output()
+                //     }
+                // }
+
+                impl From<$HighDrivePin<DefaultMode>> for $HighDrivePin<Output<HighDrive>> {
+                    fn from(pin: $HighDrivePin<DefaultMode>) -> $HighDrivePin<Output<HighDrive>> {
+                        pin.into_high_drive_output()
                     }
                 }
 
@@ -486,10 +496,3 @@ gpio!(GPIOB, gpiob, pueh, [
     PTH0: (24, 6),
     PTH1: (25, 7),
 ]);
-
-// fn thingy() {
-//     unsafe {
-//         let gpioa = &(*pac::GPIOA::ptr());
-//         let port = &(*pac::PORT::ptr());
-//     }
-// }
