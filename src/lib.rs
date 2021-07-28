@@ -77,6 +77,7 @@ pub mod clocks;
 pub mod gpio;
 pub mod port;
 pub mod prelude;
+pub mod spi;
 pub mod system;
 
 /// State of Peripheral
