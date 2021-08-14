@@ -27,7 +27,9 @@ pub struct Spi<SPI, Disabled, Pins> {
 /// Peripheral disabled
 pub struct Disabled;
 /// Peripheral enabled
-pub struct Enabled;
+pub struct Enabled<T> {
+    _state: PhantomData<T>,
+}
 /// Peripheral ignores this sub-state at this time
 pub struct DontCare;
 
@@ -137,40 +139,49 @@ impl Spi<SPI0, Disabled, DefaultPins> {
         self,
         clock: PTB2<T2>,
         sdo: PTB3<T3>,
-        sdi: Option<PTB4<T4>>,
+        // sdi: Option<PTB4<T4>>,  // Bidirectional mode needs own Mode type
+        sdi: PTB4<T4>,
         cs: Option<PTB5<T5>>,
         manage_cs: bool,
         mode: spi::Mode,
-    ) {
+    ) -> Spi<SPI0, Controller, DefaultPins> {
         // Select PTB2:5 for SPI0
         let sim = unsafe { &(*pac::SIM::ptr()) };
         // Select PTE0:3 for SPI0
         sim.pinsel.modify(|_, w| w.spi0ps()._0());
         // Enable busclock to SPI0 peripheral before touching it
         sim.scgc.modify(|_, w| w.spi0()._1());
-        self.enable_spi(true, sdi.is_none(), cs.is_some(), manage_cs, mode);
+        self.enable_spi(true, false, cs.is_some(), manage_cs, mode);
         let _ = (clock, sdo, sdi, cs);
-        unimplemented!();
+        Spi {
+            peripheral: self.peripheral,
+            _state: PhantomData,
+            _pins: PhantomData,
+        }
     }
 
     /// Enable SPI0 in peripheral mode with Alternate Pins
     pub fn enable_as_peripheral<T2, T3, T4, T5>(
         self,
         clock: PTB2<T2>,
-        sdi: Option<PTB3<T3>>,
+        sdi: PTB3<T3>,
         sdo: PTB4<T4>,
         cs: Option<PTB5<T5>>,
         manage_cs: bool,
         mode: spi::Mode,
-    ) {
+    ) -> Spi<SPI0, Enabled<Peripheral>, DefaultPins> {
         let sim = unsafe { &(*pac::SIM::ptr()) };
         // Select PTE0:3 for SPI0
         sim.pinsel.modify(|_, w| w.spi0ps()._0());
         // Enable busclock to SPI0 peripheral before touching it
         sim.scgc.modify(|_, w| w.spi0()._1());
-        self.enable_spi(false, sdi.is_none(), cs.is_some(), manage_cs, mode);
+        self.enable_spi(false, false, cs.is_some(), manage_cs, mode);
         let _ = (clock, sdo, sdi, cs);
-        unimplemented!();
+        Spi {
+            peripheral: self.peripheral,
+            _state: PhantomData,
+            _pins: PhantomData,
+        }
     }
 }
 
@@ -180,11 +191,12 @@ impl Spi<SPI0, Disabled, AltPins> {
         self,
         clock: PTE0<T0>,
         sdo: PTE1<T1>,
-        sdi: Option<PTE2<T2>>,
+        // sdi: Option<PTE2<T2>>,  // Bidirectional mode needs own Mode type
+        sdi: PTE2<T2>,
         cs: Option<PTE3<T3>>,
         manage_cs: bool,
         mode: spi::Mode,
-    ) {
+    ) -> Spi<SPI0, Controller, AltPins> {
         let sim = unsafe { &(*pac::SIM::ptr()) };
         // Select PTE0:3 for SPI0
         sim.pinsel.modify(|_, w| w.spi0ps()._1());
@@ -194,29 +206,38 @@ impl Spi<SPI0, Disabled, AltPins> {
         // bidirectional controller with mode fault enabled will auto switch to
         // peripheral mode when modefault occurs. Current impl does not handle
         // that
-        self.enable_spi(true, sdi.is_none(), cs.is_some(), manage_cs, mode);
+        self.enable_spi(true, false, cs.is_some(), manage_cs, mode);
         let _ = (clock, sdo, sdi, cs);
-        unimplemented!();
+        Spi {
+            peripheral: self.peripheral,
+            _state: PhantomData,
+            _pins: PhantomData,
+        }
     }
 
     /// Enable SPI0 in peripheral mode with Alternate Pins
     pub fn enable_as_peripheral<T0, T1, T2, T3>(
         self,
         clock: PTE0<T0>,
-        sdi: Option<PTE1<T1>>,
+        // sdi: Option<PTE1<T1>>,  // Bidirectional mode needs own mode type
+        sdi: PTE1<T1>,
         sdo: PTE2<T2>,
         cs: Option<PTE3<T3>>,
         manage_cs: bool,
         mode: spi::Mode,
-    ) {
+    ) -> Spi<SPI0, Enabled<Peripheral>, AltPins> {
         let sim = unsafe { &(*pac::SIM::ptr()) };
         // Select PTE0:3 for SPI0
         sim.pinsel.modify(|_, w| w.spi0ps()._1());
         // Enable busclock to SPI0 peripheral before touching it
         sim.scgc.modify(|_, w| w.spi0()._1());
-        self.enable_spi(false, sdi.is_none(), cs.is_some(), manage_cs, mode);
+        self.enable_spi(false, false, cs.is_some(), manage_cs, mode);
         let _ = (clock, sdi, sdo, cs);
-        unimplemented!();
+        Spi {
+            peripheral: self.peripheral,
+            _state: PhantomData,
+            _pins: PhantomData,
+        }
     }
 }
 
@@ -231,11 +252,12 @@ impl Spi<SPI1, Disabled, DefaultPins> {
         self,
         clock: PTD0<T0>,
         sdo: PTD1<T1>,
-        sdi: Option<PTD2<T2>>,
+        // sdi: Option<PTD2<T2>>,  // Bidirectional mode needs own Mode type
+        sdi: PTD2<T2>,
         cs: Option<PTD3<T3>>,
         manage_cs: bool,
         mode: spi::Mode,
-    ) -> Spi<SPI1, Controller, DefaultPins> {
+    ) -> Spi<SPI1, Enabled<Controller>, DefaultPins> {
         // Enable bus clock to SPI1 (needed before writing anything to the SPI
         // peripheral
         unsafe { (*pac::SIM::ptr()).scgc.modify(|_, w| w.spi1()._1()) };
@@ -244,10 +266,9 @@ impl Spi<SPI1, Disabled, DefaultPins> {
         // peripheral mode when modefault occurs. Current impl does not handle
         // that
 
-        self.enable_spi(true, sdi.is_none(), cs.is_some(), manage_cs, mode);
+        self.enable_spi(true, false, cs.is_some(), manage_cs, mode);
 
         let _ = (clock, sdo, sdi, cs);
-        unimplemented!();
         Spi {
             peripheral: self.peripheral,
             _state: PhantomData,
@@ -259,19 +280,19 @@ impl Spi<SPI1, Disabled, DefaultPins> {
     pub fn enable_as_peripheral<T0, T1, T2, T3>(
         self,
         clock: PTD0<T0>,
-        sdi: Option<PTD1<T1>>,
+        //sdi: Option<PTD1<T1>>,  // Bidirectional mode needs own Mode type
+        sdi: PTD1<T1>,
         sdo: PTD2<T2>,
         cs: Option<PTD3<T3>>,
         manage_cs: bool,
         mode: spi::Mode,
-    ) -> Spi<SPI1, Peripheral, DefaultPins> {
+    ) -> Spi<SPI1, Enabled<Peripheral>, DefaultPins> {
         // Enable bus clock to SPI1 (needed before writing anything to the SPI
         // peripheral
         unsafe { (*pac::SIM::ptr()).scgc.modify(|_, w| w.spi1()._1()) };
 
-        self.enable_spi(false, sdi.is_none(), cs.is_some(), manage_cs, mode);
+        self.enable_spi(false, false, cs.is_some(), manage_cs, mode);
         let _ = (clock, sdi, sdo, cs);
-        unimplemented!();
         Spi {
             peripheral: self.peripheral,
             _state: PhantomData,
@@ -285,9 +306,16 @@ macro_rules! spi_builder {
         $(
             impl<Pins> Spi<$SpiRegister, Disabled, Pins> {
                 /// Do the low level work of enabling the SPI. try for DRY.
-                fn enable_spi(&self, is_bidirectional: bool, is_controller: bool, use_cs: bool, manage_cs: bool, mode: spi::Mode) {
+                fn enable_spi(
+                    &self,
+                    is_controller: bool,
+                    is_bidirectional: bool,
+                    use_cs: bool,
+                    manage_cs: bool,
+                    mode: spi::Mode
+                ) {
                     self.peripheral.c1.write(|w| {
-                        w.lsbfe()._0()
+                        w.lsbfe()._0()  // MSB is transfered first
                             .ssoe()
                             .bit(use_cs && manage_cs)
                             .cpha()
@@ -322,14 +350,14 @@ macro_rules! spi_builder {
                 }
             }
 
-            impl<Pins> Spi<$SpiRegister, Controller, Pins> {
+            impl<Pins, Mode> Spi<$SpiRegister, Enabled<Mode>, Pins> {
                 /// Set the baud rate of transmission
                 ///
                 /// This is only used when the MCU is the bus Controller. This relies on
                 /// accurately inputting the bus frequency until a way to share the current
                 /// bus frequency is worked out.
                 pub fn set_baudrate(&self, baudrate: Hertz, bus_freq: Hertz) {
-                    let divisor = bus_to_baudrate_divisor(*bus_freq.integer(), *baudrate.integer());
+                    let divisor = bus_to_baudrate_divisor(bus_freq.integer(), baudrate.integer());
                     self.set_baudrate_divisor(&divisor);
                 }
 
@@ -368,6 +396,39 @@ macro_rules! spi_builder {
                 pub fn send_ready(&self) -> bool {
                     self.peripheral.s.read().sptef().bit()
                 }
+                /// Set the value for hardware read match
+                pub fn set_hw_match(&self, value: u8) {
+                    self.peripheral.m.write(|w| unsafe { w.bits(value) });
+                }
+            }
+
+            impl<Pins, Mode> spi::FullDuplex<u8> for Spi<$SpiRegister, Enabled<Mode>, Pins> {
+                type Error = core::convert::Infallible;
+
+                fn read(&mut self) -> nb::Result<u8, Self::Error> {
+                    if !self.read_ready() {
+                        return Err(nb::Error::WouldBlock);
+                    }
+
+                    // Bidirectional mode not implemented
+                    // // Set direction for bidirectional mode (no effect on normal mode)
+                    // self.peripheral.c2.modify(|_, w| w.bidiroe()._0());
+
+                    Ok(self.peripheral.d.read().bits())
+                }
+
+                fn send(&mut self, word: u8) -> nb::Result<(), Self::Error> {
+                    if !self.send_ready() {
+                        return Err(nb::Error::WouldBlock);
+                    }
+
+                    // Bidirectional mode not implemented
+                    // // Set direction for bidirectional mode (no effect on normal mode)
+                    // self.peripheral.c2.modify(|_, w| w.bidiroe()._1());
+
+                    self.peripheral.d.write(|w| unsafe { w.bits(word) });
+                    Ok(())
+                }
             }
 
         )+
@@ -388,7 +449,7 @@ impl BaudrateDivisor {
     /// was throwing errors about converting between time rates and u32, so now in
     /// u32
     pub const fn divisor(&self) -> Result<u32, ()> {
-        if (self.scale <= 7) || (self.power <= 8) {
+        if (self.scale > 7) || (self.power > 8) {
             return Err(());
         }
         Ok((self.scale as u32 + 1) << (self.power + 1))
@@ -401,25 +462,32 @@ const fn bus_to_baudrate_divisor(bus_freq: u32, baudrate: u32) -> BaudrateDiviso
     divisor_to_baudrate_divisor(target)
 }
 
+// Replace with something other than stupid brute force eventually
+// In the mean-time it's not that bad. 72 loops done on the user's host
+// computer is practically instantaneous. Even on target it isn't the end of
+// the world.
+// @TODO check NXP's examples to see if they do better so I don't have to think
 const fn divisor_to_baudrate_divisor(divisor: u32) -> BaudrateDivisor {
     let mut best: BaudrateDivisor = BaudrateDivisor { scale: 7, power: 9 };
-    let mut best_div: u32 = u32::max_value();
     let mut scale: u8 = 0;
     let mut power: u8 = 0;
+    let mut old_error: u32 = u32::max_value();
     while scale <= 7 {
-        while power <= 9 {
+        while power <= 8 {
             let new = BaudrateDivisor { scale, power };
             let new_div = match new.divisor() {
                 Ok(f) => f,
                 Err(_) => 8 << 9,
             };
-            if (new_div - divisor) <= (best_div - divisor) {
-                best_div = new_div;
+            let error: u32 = (new_div as i32 - divisor as i32).unsigned_abs();
+            if error <= old_error {
+                old_error = error;
                 best.scale = scale;
                 best.power = power;
             }
             power += 1;
         }
+        power = 0;
         scale += 1;
     }
     best
@@ -431,25 +499,4 @@ pub enum Errors {
     DivsorOutOfRange,
     /// One of the inputs is out of range
     BadInput,
-}
-
-impl<Pins> spi::FullDuplex<u8> for Spi<SPI0, Controller, Pins> {
-    type Error = core::convert::Infallible;
-
-    fn read(&mut self) -> nb::Result<u8, Self::Error> {
-        if !self.read_ready() {
-            return Err(nb::Error::WouldBlock);
-        }
-
-        Ok(self.peripheral.d.read().bits())
-    }
-
-    fn send(&mut self, word: u8) -> nb::Result<(), Self::Error> {
-        if !self.send_ready() {
-            return Err(nb::Error::WouldBlock);
-        }
-
-        self.peripheral.d.write(|w| unsafe { w.bits(word) });
-        Ok(())
-    }
 }
