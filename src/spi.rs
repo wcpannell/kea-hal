@@ -3,13 +3,31 @@
 //! ## Pins
 //!
 //! The SPI0 peripheral has two choices for its I/O pins (SCK, MOSI, MISO, CS),
-//! PTB2:5 or PTE0:3. SPI1 only uses one set of pins (PTD0:3)
+//! PTB2:5 or PTE0:3. SPI1 only uses one set of pins (PTD0:3).
+//!
+//! At this time there is no method implemented to return Pins from the SPI
+//! peripherals. Keep in mind that once the pins given to the SPI they can not
+//! be returned.
+//!
+//! ### High Drive Current GPIO
+//!
+//! The SPI peripheral, like other peripherals in this family of MCUs will
+//! reconfigure the GPIO ports as needed when the peripheral is activated.
+//! However, the SPI peripherals do not modify the High Drive Current
+//! peripheral's settings. This provides stronger drive to the SPI bus lines in
+//! order to increase the slew rate for the output signal.
+//!
+//! Note that only the MOSI (sdo in controller mode) pin for SPI0 and SPI1 with
+//! the default pins and MISO (sdo in peripheral mode) for SPI0 with alternate
+//! pins have the high current drive peripheral implemented.
+//!
+//! See the spi-talking-to-myself example in the source repo.
 //!
 //! ## Interrupts
 //!
-//! Not implemented
-//!
 //! SPI peripherals have one interrupt vector, 4 flags, and 3 masks each.
+//! Once in the interrupt you will have to check the flag bits to determine
+//! which flag triggered the interrupt in order to respond appropriately.
 
 use crate::hal::spi;
 use crate::{pac::SPI0, pac::SPI1, HALExt};
@@ -43,22 +61,7 @@ pub struct DefaultPins;
 /// Peripheral is using alternate pins
 pub struct AltPins;
 
-// trait ClockPin {}
-// trait CopiPin {}
-// trait CipoPin {}
-// trait CsPin {}
-
-// struct PinsStorage {
-//     clock: ClockPin,
-//     copi: CopiPin,
-//     cipo: CipoPin,
-//     cs: Option<CsPin>,
-// }
-//
-
-// /// Stores Spi Pins
-// trait PinStorage {}
-//
+// // Roughing work on Pin Storage so we can return the pins one day
 // struct DefaultPinsSpi0<T2, T3, T4, T5> {
 //     clock: PTB2<T2>,
 //     copi: PTB3<T3>,
@@ -66,7 +69,7 @@ pub struct AltPins;
 //     cs: Option<PTB5<T5>>,
 // }
 //
-// impl<T2, T3, T4, T5> PinStorage for DefaultPinsSpi0<T2, T3, T4, T5> {}
+// impl<T2, T3, T4, T5> Spi0Pins for DefaultPinsSpi0<T2, T3, T4, T5> {}
 
 // impl<T2, T3, T4, T5> Default for DefaultPinsSpi0<T2, T3, T4, T5> {
 //     fn default() -> Self {

@@ -1,17 +1,10 @@
-//! SPI example to communicate with the System Basis Chip on the FRDM-KEAxXXX
-//! dev boards.
-//!
-//! Some things to know about the setup on the devboard:
-//!  - The SBC is connected to SPI1 default pins PTD0:PTD3
-//!  - SBC IO-O is connected to SW4 which has a 12k pullup to Vsup and debounce
-//!  - SBC MuxOut is connected to PA6
+//! SPI example to communicate between SPI0 and and SPI1 on the same board
 
 #![no_main]
 #![no_std]
 
 use kea_hal as hal;
 
-use core::convert::TryInto;
 use cortex_m_rt::entry;
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::spi;
@@ -25,7 +18,6 @@ fn main() -> ! {
     let dp = pac::Peripherals::take().unwrap();
 
     let gpioa = dp.GPIOA.split();
-    let gpiob = dp.GPIOB.split();
     let periph_spi = dp.SPI0.split();
     let control_spi = dp.SPI1.split();
 
@@ -45,13 +37,14 @@ fn main() -> ! {
         gpioa.ptd0, // clock
         gpioa.ptd1, // sdo (mosi)
         gpioa.ptd2, // sdi (miso)
-        //Some(gpioa.ptd3), // cs; pin will be toggled by the peripheral
         None, // cs; pin will be toggled by the user
         true, // The peripheral will set the mode_fault flag (and interrupt if enabled) if some other device tries to be master and sets this line low
         spi_mode,
     );
 
-    // try setting the PTB3 drive strenght first?
+    // Setting the PTB4 (peripheral sdo / miso) drive strength to high.
+    // Using only the default push/pull results in only driving to 2.2ish volts
+    // on miso line. High drive mode has the power to swing it rail to rail.
     let ptb4 = gpioa.ptb4.into_high_drive_output();
 
     // Use normal pins
@@ -79,7 +72,7 @@ fn main() -> ! {
     // bus clock is 16MHz by default. SBC max rate is 1/250ns = 4MHz, let's use
     // 1MHz just for fun.
     // Calculate and set the bus divisor settings to achieve 1Mbps baudrate.
-    control_spi.set_baudrate(1_000_000_u32.Hz(), 16_u32.MHz().try_into().unwrap());
+    control_spi.set_baudrate(1_000_000_u32.Hz(), 16_000_000_u32.Hz());
 
     use heapless::spsc::Queue;
     let mut control_txq: Queue<u8, 32> = Queue::new();
