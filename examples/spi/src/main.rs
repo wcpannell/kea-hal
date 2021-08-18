@@ -11,7 +11,6 @@
 
 use kea_hal as hal;
 
-use core::convert::TryInto;
 use cortex_m_rt::entry;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
 use embedded_hal::spi;
@@ -65,7 +64,7 @@ fn main() -> ! {
     // bus clock is 16MHz by default. SBC max rate is 1/250ns = 4MHz, let's use
     // 1MHz just for fun.
     // Calculate and set the bus divisor settings to achieve 1Mbps baudrate.
-    sbc_spi.set_baudrate(1_000_000_u32.Hz(), 16_u32.MHz().try_into().unwrap());
+    sbc_spi.set_baudrate(1_000_000_u32.Hz(), 16_000_000_u32.Hz());
 
     // read Mode
     const SBC_READ_MODE: u16 = 0xDD80;

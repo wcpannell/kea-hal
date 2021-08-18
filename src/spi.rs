@@ -169,8 +169,7 @@ impl Spi<SPI0, Disabled, DefaultPins> {
         clock: PTB2<T2>,
         sdi: PTB3<T3>,
         sdo: PTB4<T4>,
-        cs: Option<PTB5<T5>>,
-        manage_cs: bool,
+        cs: PTB5<T5>,
         mode: spi::Mode,
     ) -> Spi<SPI0, Enabled<Peripheral>, DefaultPins> {
         let sim = unsafe { &(*pac::SIM::ptr()) };
@@ -178,7 +177,10 @@ impl Spi<SPI0, Disabled, DefaultPins> {
         sim.pinsel.modify(|_, w| w.spi0ps()._0());
         // Enable busclock to SPI0 peripheral before touching it
         sim.scgc.modify(|_, w| w.spi0()._1());
-        self.enable_spi(false, false, cs.is_some(), manage_cs, mode);
+
+        // Peripheral mode always uses cs, and manage_cs has no effect
+        self.enable_spi(false, false, true, true, mode);
+
         let _ = (clock, sdo, sdi, cs);
         Spi {
             peripheral: self.peripheral,
@@ -225,8 +227,7 @@ impl Spi<SPI0, Disabled, AltPins> {
         // sdi: Option<PTE1<T1>>,  // Bidirectional mode needs own mode type
         sdi: PTE1<T1>,
         sdo: PTE2<T2>,
-        cs: Option<PTE3<T3>>,
-        manage_cs: bool,
+        cs: PTE3<T3>,
         mode: spi::Mode,
     ) -> Spi<SPI0, Enabled<Peripheral>, AltPins> {
         let sim = unsafe { &(*pac::SIM::ptr()) };
@@ -234,7 +235,10 @@ impl Spi<SPI0, Disabled, AltPins> {
         sim.pinsel.modify(|_, w| w.spi0ps()._1());
         // Enable busclock to SPI0 peripheral before touching it
         sim.scgc.modify(|_, w| w.spi0()._1());
-        self.enable_spi(false, false, cs.is_some(), manage_cs, mode);
+
+        // Peripheral mode always uses cs, and manage_cs has no effect
+        self.enable_spi(false, false, true, true, mode);
+
         let _ = (clock, sdi, sdo, cs);
         Spi {
             peripheral: self.peripheral,
@@ -286,15 +290,15 @@ impl Spi<SPI1, Disabled, DefaultPins> {
         //sdi: Option<PTD1<T1>>,  // Bidirectional mode needs own Mode type
         sdi: PTD1<T1>,
         sdo: PTD2<T2>,
-        cs: Option<PTD3<T3>>,
-        manage_cs: bool,
+        cs: PTD3<T3>,
         mode: spi::Mode,
     ) -> Spi<SPI1, Enabled<Peripheral>, DefaultPins> {
         // Enable bus clock to SPI1 (needed before writing anything to the SPI
         // peripheral
         unsafe { (*pac::SIM::ptr()).scgc.modify(|_, w| w.spi1()._1()) };
 
-        self.enable_spi(false, false, cs.is_some(), manage_cs, mode);
+        // Peripheral mode always uses cs, and manage_cs has no effect
+        self.enable_spi(false, false, true, true, mode);
         let _ = (clock, sdi, sdo, cs);
         Spi {
             peripheral: self.peripheral,
