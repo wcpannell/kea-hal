@@ -48,22 +48,15 @@ fn main() -> ! {
     let ptb4 = gpioa.ptb4.into_high_drive_output();
 
     // Use normal pins
-    let mut periph_spi = periph_spi.enable_as_peripheral(
-        gpioa.ptb2,
-        gpioa.ptb3,
-        //gpioa.ptb4,
-        ptb4,
-        Some(gpioa.ptb5),
-        true,
-        spi_mode,
-    );
+    let mut periph_spi =
+        periph_spi.enable_as_peripheral(gpioa.ptb2, gpioa.ptb3, ptb4, gpioa.ptb5, spi_mode);
     /*
         // use alternate pins.
         let mut periph_spi = periph_spi.into_alt_pins().enable_as_peripheral(
             gpiob.pte0,
             gpiob.pte1,
             gpiob.pte2,
-            Some(gpiob.pte3),
+            gpiob.pte3,
             true,
             spi_mode,
         );
