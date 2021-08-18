@@ -1,6 +1,6 @@
 [package]
 name = "kea-hal"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["W. Clayton Pannell <clayton.pannell@gmail.com>"]
 edition = "2018"
 description = "HAL for NXP KEA devices."
@@ -16,7 +16,7 @@ license = "MIT"
 [dependencies]
 cortex-m = "0.7"
 nb = "1.0.0"
-embedded-time = "0.10.1"
+embedded-time = "0.12.0"
 
 [dependencies.SKEAZN642]
 version = "0.2.0"

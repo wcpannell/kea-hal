@@ -1,5 +1,5 @@
 [package]
-name = "blinky"
+name = "spi"
 version = "0.1.0"
 authors = ["W. Clayton Pannell <clayton.pannell@gmail.com>"]
 edition = "2018"
@@ -12,8 +12,14 @@ nb = "1.0.0"
 cortex-m = "0.7"
 cortex-m-rt = "0.6.13"
 panic-halt = "0.2.0"
+heapless="0.7"
 
 [dependencies.kea-hal]
 path = "../.."
 version = "0.5.0"
 features = ["rt"]
+
+[profile.release]
+lto = true
+debug = true
+# codegen-units = 1

@@ -67,6 +67,7 @@ pub extern crate cortex_m;
 pub extern crate cortex_m_rt;
 pub extern crate embedded_hal as hal;
 pub extern crate embedded_hal_alpha as hal_alpha;
+pub extern crate embedded_time;
 pub extern crate nb;
 pub extern crate void;
 
@@ -77,6 +78,7 @@ pub mod clocks;
 pub mod gpio;
 pub mod port;
 pub mod prelude;
+pub mod spi;
 pub mod system;
 
 /// State of Peripheral

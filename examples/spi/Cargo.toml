@@ -1,5 +1,5 @@
 [package]
-name = "blinky"
+name = "spi"
 version = "0.1.0"
 authors = ["W. Clayton Pannell <clayton.pannell@gmail.com>"]
 edition = "2018"
@@ -17,3 +17,7 @@ panic-halt = "0.2.0"
 path = "../.."
 version = "0.5.0"
 features = ["rt"]
+
+[profile.release]
+lto = true
+debug = true
